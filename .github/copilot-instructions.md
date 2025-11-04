@@ -143,7 +143,8 @@ user_checklist.get_progress_percentage()  # Returns 0-100
 - Responsive design
 
 ### Common Issues to Avoid
-- Don't use deprecated `datetime.utcnow()` - use `datetime.now(datetime.UTC)` instead
+- Don't use deprecated `datetime.utcnow()` - use `datetime.now(datetime.UTC)` instead for new code
+  - Note: Existing code still uses `datetime.utcnow()` (technical debt to address)
 - Don't use `Query.get()` - use `Session.get()` instead
 - Ensure proper cascade deletes are configured in relationships
 - Always use app context for database operations outside request handlers
