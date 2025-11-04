@@ -14,7 +14,7 @@
                 <li><a href="{{ url_for('main.index') }}">Home</a></li>
                 <li><a href="{{ url_for('main.browse') }}">Browse</a></li>
                 {% if current_user.is_authenticated %}
-                    <li><a href="{{ url_for('main.my_checklists') }}">My Checklists</a></li>
+                    <li><a href="{{ url_for('main.my_games') }}">My Games</a></li>
                     <li><a href="{{ url_for('checklist.create') }}">Create</a></li>
                     <li><a href="{{ url_for('auth.logout') }}">Logout ({{ current_user.username }})</a></li>
                 {% else %}

@@ -3,7 +3,15 @@
 {% block title %}My Checklists - Game Checklist Progresser{% endblock %}
 
 {% block content %}
-<h1>My Checklists</h1>
+<div class="page-header">
+    <h1>My Checklists{% if selected_game %} - {{ selected_game }}{% endif %}</h1>
+    <div class="game-context">
+        {% if selected_game %}
+        <p>Viewing checklists for: <strong>{{ selected_game }}</strong></p>
+        <a href="{{ url_for('main.my_games') }}" class="btn btn-secondary">Switch Game</a>
+        {% endif %}
+    </div>
+</div>
 
 <section class="my-created">
     <h2>Created by Me</h2>
