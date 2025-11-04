@@ -46,24 +46,30 @@
   - "Collect all Legendary Armaments"
 - Repeat to add more items
 
-### 5. View Your Checklists
+### 5. Copy Your Own Checklist for Progress Tracking
+- View your own checklist by clicking on it
+- Click the "Copy to My Checklists" button
+- The checklist is now copied to your account for personal progress tracking
+- Note: You can copy both your own checklists and community checklists
+
+### 6. View Your Checklists
 - Click "My Checklists"
 - See two sections:
   - **Created by Me**: Your original checklists
-  - **My Progress Tracking**: Checklists you've copied from others
+  - **My Progress Tracking**: Checklists you've copied (including your own)
 
-### 6. Browse Community Checklists
+### 7. Browse Community Checklists
 - Click "Browse" in the navigation
 - See all public checklists from the community
 - Use the search box to filter by game name
 - Click on any checklist to view it
 
-### 7. Copy a Community Checklist
-- Find a public checklist (or use the one you created)
+### 8. Copy a Community Checklist
+- Find a public checklist
 - Click "Copy to My Checklists"
 - The checklist is now in your account for progress tracking
 
-### 8. Track Your Progress
+### 9. Track Your Progress
 - Go to "My Checklists"
 - Click on a copied checklist
 - Check off items as you complete them

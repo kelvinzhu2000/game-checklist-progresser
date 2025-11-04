@@ -15,7 +15,8 @@
         {% if current_user.is_authenticated %}
             {% if checklist.creator_id == current_user.id %}
                 <a href="{{ url_for('checklist.add_item', checklist_id=checklist.id) }}" class="btn btn-primary">Add Item</a>
-            {% elif not user_copy %}
+            {% endif %}
+            {% if not user_copy %}
                 <form method="POST" action="{{ url_for('checklist.copy', checklist_id=checklist.id) }}" style="display: inline;">
                     <button type="submit" class="btn btn-success">Copy to My Checklists</button>
                 </form>
