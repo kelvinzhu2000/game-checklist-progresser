@@ -21,7 +21,7 @@ def browse():
     
     query = Checklist.query.filter_by(is_public=True)
     if game:
-        query = query.filter(Checklist.game_name.contains(game))
+        query = query.filter(Checklist.game_name.ilike(f'%{game}%'))
     
     pagination = query.order_by(Checklist.created_at.desc()).paginate(
         page=page, per_page=20, error_out=False

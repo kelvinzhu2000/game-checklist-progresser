@@ -7,10 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <nav class="navbar">
+    <nav class="navbar" role="navigation">
         <div class="container">
             <a href="{{ url_for('main.index') }}" class="navbar-brand">Game Checklist Progresser</a>
-            <ul class="navbar-menu">
+            <ul class="navbar-menu" role="menubar">
                 <li><a href="{{ url_for('main.index') }}">Home</a></li>
                 <li><a href="{{ url_for('main.browse') }}">Browse</a></li>
                 {% if current_user.is_authenticated %}
