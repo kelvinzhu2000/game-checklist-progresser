@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ checklist.title }} - Game Checklist Progresser{% endblock %}
+
+{% block content %}
+<div class="checklist-view">
+    <div class="checklist-header">
+        <h1>{{ checklist.title }}</h1>
+        <p class="game-name">Game: {{ checklist.game_name }}</p>
+        {% if checklist.description %}
+            <p class="description">{{ checklist.description }}</p>
+        {% endif %}
+        <p class="meta">Created by {{ checklist.creator.username }} on {{ checklist.created_at.strftime('%Y-%m-%d') }}</p>
+        
+        {% if current_user.is_authenticated %}
+            {% if checklist.creator_id == current_user.id %}
+                <a href="{{ url_for('checklist.add_item', checklist_id=checklist.id) }}" class="btn btn-primary">Add Item</a>
+            {% elif not user_copy %}
+                <form method="POST" action="{{ url_for('checklist.copy', checklist_id=checklist.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-success">Copy to My Checklists</button>
+                </form>
+            {% endif %}
+        {% endif %}
+        
+        {% if user_copy %}
+            <div class="progress-info">
+                <p>Your Progress: {{ user_copy.get_progress_percentage() }}%</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ user_copy.get_progress_percentage() }}%"></div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    {% if items %}
+    <div class="checklist-items">
+        <h2>Checklist Items</h2>
+        <ul class="items-list">
+            {% for item in items %}
+            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}">
+                <div class="item-content">
+                    {% if user_copy %}
+                        <form method="POST" action="{{ url_for('checklist.toggle_progress', checklist_id=checklist.id, item_id=item.id) }}" class="checkbox-form">
+                            <input type="checkbox" {% if progress.get(item.id) %}checked{% endif %} onchange="this.form.submit()">
+                        </form>
+                    {% endif %}
+                    <div class="item-details">
+                        <h3>{{ item.title }}</h3>
+                        {% if item.description %}
+                            <p>{{ item.description }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+        <p>No items in this checklist yet. {% if checklist.creator_id == current_user.id %}<a href="{{ url_for('checklist.add_item', checklist_id=checklist.id) }}">Add the first item!</a>{% endif %}</p>
+    {% endif %}
+</div>
+{% endblock %}

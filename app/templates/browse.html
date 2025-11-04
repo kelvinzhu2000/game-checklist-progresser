@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Browse Checklists - Game Checklist Progresser{% endblock %}
+
+{% block content %}
+<h1>Browse Checklists</h1>
+
+<div class="search-form">
+    <form method="GET" action="{{ url_for('main.browse') }}">
+        <input type="text" name="game" value="{{ game }}" placeholder="Search by game name..." class="form-control">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+</div>
+
+{% if pagination.items %}
+<div class="checklist-grid">
+    {% for checklist in pagination.items %}
+    <div class="checklist-card">
+        <h3><a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}">{{ checklist.title }}</a></h3>
+        <p class="game-name">{{ checklist.game_name }}</p>
+        {% if checklist.description %}
+            <p class="description">{{ checklist.description[:100] }}{% if checklist.description|length > 100 %}...{% endif %}</p>
+        {% endif %}
+        <p class="creator">By {{ checklist.creator.username }}</p>
+        <p class="item-count">{{ checklist.items.count() }} items</p>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="pagination">
+    {% if pagination.has_prev %}
+        <a href="{{ url_for('main.browse', page=pagination.prev_num, game=game) }}" class="btn">Previous</a>
+    {% endif %}
+    
+    <span>Page {{ pagination.page }} of {{ pagination.pages }}</span>
+    
+    {% if pagination.has_next %}
+        <a href="{{ url_for('main.browse', page=pagination.next_num, game=game) }}" class="btn">Next</a>
+    {% endif %}
+</div>
+{% else %}
+<p>No checklists found. {% if current_user.is_authenticated %}<a href="{{ url_for('checklist.create') }}">Create the first one!</a>{% endif %}</p>
+{% endif %}
+{% endblock %}

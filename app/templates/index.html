@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Game Checklist Progresser{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1>Welcome to Game Checklist Progresser</h1>
+    <p>Create, share, and track your gaming checklists with the community!</p>
+    {% if not current_user.is_authenticated %}
+        <div class="hero-buttons">
+            <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Get Started</a>
+            <a href="{{ url_for('main.browse') }}" class="btn btn-secondary">Browse Checklists</a>
+        </div>
+    {% endif %}
+</div>
+
+<section class="features">
+    <h2>Features</h2>
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h3>Create Checklists</h3>
+            <p>Build comprehensive checklists for your favorite games</p>
+        </div>
+        <div class="feature-card">
+            <h3>Share with Community</h3>
+            <p>Make your checklists public for others to use</p>
+        </div>
+        <div class="feature-card">
+            <h3>Track Progress</h3>
+            <p>Copy checklists and monitor your completion rate</p>
+        </div>
+    </div>
+</section>
+
+{% if checklists %}
+<section class="recent-checklists">
+    <h2>Recent Public Checklists</h2>
+    <div class="checklist-grid">
+        {% for checklist in checklists %}
+        <div class="checklist-card">
+            <h3><a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}">{{ checklist.title }}</a></h3>
+            <p class="game-name">{{ checklist.game_name }}</p>
+            <p class="creator">By {{ checklist.creator.username }}</p>
+            <p class="item-count">{{ checklist.items.count() }} items</p>
+        </div>
+        {% endfor %}
+    </div>
+    <a href="{{ url_for('main.browse') }}" class="btn">View All</a>
+</section>
+{% endif %}
+{% endblock %}
