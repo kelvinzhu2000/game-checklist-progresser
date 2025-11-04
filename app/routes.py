@@ -57,7 +57,10 @@ def login():
             login_user(user, remember=form.remember_me.data)
             next_page = request.args.get('next')
             flash('Login successful!', 'success')
-            return redirect(next_page) if next_page else redirect(url_for('main.index'))
+            # Prevent open redirect vulnerability by validating next_page
+            if next_page and next_page.startswith('/'):
+                return redirect(next_page)
+            return redirect(url_for('main.index'))
         else:
             flash('Invalid username or password', 'error')
     
