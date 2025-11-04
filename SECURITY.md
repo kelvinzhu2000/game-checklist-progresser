@@ -3,7 +3,9 @@
 ## Security Measures Implemented
 
 ### 1. Password Security
-- **Password Hashing**: All passwords are hashed using Werkzeug's `generate_password_hash()` function with secure defaults
+- **Password Hashing**: All passwords are hashed using Werkzeug's `generate_password_hash()` with pbkdf2:sha256 method
+  - Uses PBKDF2-HMAC-SHA256 with 600,000 iterations (OWASP recommended minimum)
+  - Compatible across all Python versions and platforms (some builds lack scrypt support)
 - **No Plain Text Storage**: Passwords are never stored in plain text in the database
 - **Secure Verification**: Password verification uses `check_password_hash()` to prevent timing attacks
 
