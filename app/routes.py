@@ -10,6 +10,17 @@ main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 checklist_bp = Blueprint('checklist', __name__, url_prefix='/checklist')
 
+def is_safe_redirect_url(target):
+    """
+    Validates that a redirect URL is safe (relative to the current domain).
+    Returns True only if the URL has no netloc (network location/domain),
+    preventing open redirect vulnerabilities.
+    """
+    if not target:
+        return False
+    parsed = urlparse(target)
+    return parsed.netloc == '' and parsed.scheme == ''
+
 @main_bp.route('/')
 def index():
     public_checklists = Checklist.query.filter_by(is_public=True).order_by(Checklist.created_at.desc()).limit(10).all()
@@ -58,8 +69,8 @@ def login():
             login_user(user, remember=form.remember_me.data)
             next_page = request.args.get('next')
             flash('Login successful!', 'success')
-            # Prevent open redirect vulnerability by validating next_page is relative
-            if next_page and urlparse(next_page).netloc == '':
+            # Prevent open redirect vulnerability by validating the redirect target
+            if is_safe_redirect_url(next_page):
                 return redirect(next_page)
             return redirect(url_for('main.index'))
         else:
