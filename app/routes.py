@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort
 from flask_login import login_user, logout_user, current_user, login_required
+from urllib.parse import urlparse
 from app import db
 from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm
@@ -57,8 +58,8 @@ def login():
             login_user(user, remember=form.remember_me.data)
             next_page = request.args.get('next')
             flash('Login successful!', 'success')
-            # Prevent open redirect vulnerability by validating next_page
-            if next_page and next_page.startswith('/'):
+            # Prevent open redirect vulnerability by validating next_page is relative
+            if next_page and urlparse(next_page).netloc == '':
                 return redirect(next_page)
             return redirect(url_for('main.index'))
         else:
