@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Checklist, ChecklistItem, UserProgress
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
@@ -170,29 +170,23 @@ def create():
 def view(checklist_id):
     checklist = Checklist.query.get_or_404(checklist_id)
     
+    # Check permissions - user must be creator or checklist must be public/parent is public
     if not checklist.is_public and (not current_user.is_authenticated or checklist.creator_id != current_user.id):
         abort(403)
     
     items = checklist.items.all()
-    user_copy = None
     progress = {}
     
-    if current_user.is_authenticated:
-        user_copy = UserChecklist.query.filter_by(
-            user_id=current_user.id,
-            checklist_id=checklist_id
-        ).first()
-        
-        if user_copy:
-            for item in items:
-                prog = UserProgress.query.filter_by(
-                    user_checklist_id=user_copy.id,
-                    item_id=item.id
-                ).first()
-                progress[item.id] = prog.completed if prog else False
+    if current_user.is_authenticated and checklist.creator_id == current_user.id:
+        # If this is the user's own checklist (copy), show their progress
+        for item in items:
+            prog = UserProgress.query.filter_by(
+                checklist_id=checklist_id,
+                item_id=item.id
+            ).first()
+            progress[item.id] = prog.completed if prog else False
     
-    return render_template('view_checklist.html', checklist=checklist, items=items, 
-                         user_copy=user_copy, progress=progress)
+    return render_template('view_checklist.html', checklist=checklist, items=items, progress=progress)
 
 @checklist_bp.route('/<int:checklist_id>/add_item', methods=['GET', 'POST'])
 @login_required
@@ -224,29 +218,50 @@ def add_item(checklist_id):
 @checklist_bp.route('/<int:checklist_id>/copy', methods=['POST'])
 @login_required
 def copy(checklist_id):
-    checklist = Checklist.query.get_or_404(checklist_id)
+    parent_checklist = Checklist.query.get_or_404(checklist_id)
     
-    if not checklist.is_public and checklist.creator_id != current_user.id:
+    if not parent_checklist.is_public and parent_checklist.creator_id != current_user.id:
         abort(403)
     
-    existing = UserChecklist.query.filter_by(
-        user_id=current_user.id,
-        checklist_id=checklist_id
+    # Check if user already has a copy
+    existing = Checklist.query.filter_by(
+        creator_id=current_user.id,
+        parent_id=checklist_id
     ).first()
     
     if existing:
         flash('You already have a copy of this checklist!', 'warning')
-        # Set the game context to the checklist's game
-        set_selected_game(checklist.game_name)
+        set_selected_game(parent_checklist.game_name)
         return redirect(url_for('main.my_checklists'))
     
-    user_checklist = UserChecklist(user_id=current_user.id, checklist_id=checklist_id)
-    db.session.add(user_checklist)
-    db.session.commit()
+    # Create a new checklist as a copy
+    new_checklist = Checklist(
+        title=parent_checklist.title,
+        game_name=parent_checklist.game_name,
+        description=parent_checklist.description,
+        creator_id=current_user.id,
+        is_public=False,  # Copies are private by default
+        parent_id=checklist_id
+    )
+    db.session.add(new_checklist)
+    db.session.flush()  # Get the ID
     
-    for item in checklist.items.all():
+    # Copy all items from parent checklist
+    for parent_item in parent_checklist.items.all():
+        new_item = ChecklistItem(
+            checklist_id=new_checklist.id,
+            title=parent_item.title,
+            description=parent_item.description,
+            order=parent_item.order
+        )
+        db.session.add(new_item)
+    
+    db.session.flush()  # Ensure items are created
+    
+    # Create progress records for all items (initially uncompleted)
+    for item in new_checklist.items.all():
         progress = UserProgress(
-            user_checklist_id=user_checklist.id,
+            checklist_id=new_checklist.id,
             item_id=item.id,
             completed=False
         )
@@ -254,22 +269,21 @@ def copy(checklist_id):
     
     db.session.commit()
     
-    # Set the game context to the copied checklist's game
-    set_selected_game(checklist.game_name)
-    
+    set_selected_game(parent_checklist.game_name)
     flash('Checklist copied to your account!', 'success')
     return redirect(url_for('main.my_checklists'))
 
 @checklist_bp.route('/<int:checklist_id>/progress/<int:item_id>/toggle', methods=['POST'])
 @login_required
 def toggle_progress(checklist_id, item_id):
-    user_checklist = UserChecklist.query.filter_by(
-        user_id=current_user.id,
-        checklist_id=checklist_id
-    ).first_or_404()
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    # Only the creator can toggle progress on their own checklist
+    if checklist.creator_id != current_user.id:
+        abort(403)
     
     progress = UserProgress.query.filter_by(
-        user_checklist_id=user_checklist.id,
+        checklist_id=checklist_id,
         item_id=item_id
     ).first_or_404()
     
@@ -282,7 +296,7 @@ def toggle_progress(checklist_id, item_id):
 @checklist_bp.route('/<int:checklist_id>/delete', methods=['POST'])
 @login_required
 def delete(checklist_id):
-    """Delete a checklist that the user created."""
+    """Delete a checklist that the user created/owns."""
     checklist = Checklist.query.get_or_404(checklist_id)
     
     # Only the creator can delete their checklist
@@ -302,65 +316,30 @@ def delete(checklist_id):
     set_selected_game(game_name)
     return redirect(url_for('main.my_checklists'))
 
-@checklist_bp.route('/<int:checklist_id>/delete-copy', methods=['POST'])
-@login_required
-def delete_copy(checklist_id):
-    """Delete a user's copy of a checklist (removes their progress)."""
-    user_checklist = UserChecklist.query.filter_by(
-        user_id=current_user.id,
-        checklist_id=checklist_id
-    ).first_or_404()
-    
-    checklist = Checklist.query.get_or_404(checklist_id)
-    game_name = checklist.game_name
-    
-    try:
-        db.session.delete(user_checklist)
-        db.session.commit()
-        flash('Checklist copy removed from your account!', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('An error occurred while removing the checklist copy.', 'error')
-    
-    # Redirect back to my checklists with the same game selected
-    set_selected_game(game_name)
-    return redirect(url_for('main.my_checklists'))
-
 @main_bp.route('/my-games')
 @login_required
 def my_games():
     """Display list of games the user has checklists for."""
-    # Get games from created checklists
-    created_games = db.session.query(Checklist.game_name).filter_by(
+    # Get all games from user's checklists (both original and copies)
+    games_query = db.session.query(Checklist.game_name).filter_by(
         creator_id=current_user.id
     ).distinct().all()
     
-    # Get games from copied checklists
-    copied_games = db.session.query(Checklist.game_name).join(
-        UserChecklist, Checklist.id == UserChecklist.checklist_id
-    ).filter(
-        UserChecklist.user_id == current_user.id
-    ).distinct().all()
-    
-    # Combine and deduplicate
-    all_games = set()
-    for game in created_games:
-        all_games.add(game[0])
-    for game in copied_games:
-        all_games.add(game[0])
-    
-    # Sort games alphabetically
-    games = sorted(list(all_games))
+    # Extract game names and sort alphabetically
+    games = sorted([game[0] for game in games_query])
     
     # Get checklist count per game
     game_stats = {}
     for game in games:
-        created_count = current_user.created_checklists.filter_by(game_name=game).count()
-        copied_count = db.session.query(UserChecklist).join(
-            Checklist, Checklist.id == UserChecklist.checklist_id
-        ).filter(
-            UserChecklist.user_id == current_user.id,
-            Checklist.game_name == game
+        # Count original checklists (no parent)
+        created_count = current_user.checklists.filter_by(
+            game_name=game,
+            parent_id=None
+        ).count()
+        # Count copied checklists (has parent)
+        copied_count = current_user.checklists.filter(
+            Checklist.game_name == game,
+            Checklist.parent_id != None
         ).count()
         game_stats[game] = {'created': created_count, 'copied': copied_count}
     
@@ -393,16 +372,16 @@ def my_checklists():
         # If no game selected, redirect to game selection
         return redirect(url_for('main.my_games'))
     
-    # Filter checklists by selected game
-    created = current_user.created_checklists.filter_by(
-        game_name=selected_game
+    # Get original checklists (no parent) for selected game
+    created = current_user.checklists.filter_by(
+        game_name=selected_game,
+        parent_id=None
     ).order_by(Checklist.created_at.desc()).all()
     
-    copied = db.session.query(UserChecklist).join(
-        Checklist, Checklist.id == UserChecklist.checklist_id
-    ).filter(
-        UserChecklist.user_id == current_user.id,
-        Checklist.game_name == selected_game
-    ).all()
+    # Get copied checklists (has parent) for selected game
+    copied = current_user.checklists.filter(
+        Checklist.game_name == selected_game,
+        Checklist.parent_id != None
+    ).order_by(Checklist.created_at.desc()).all()
     
     return render_template('my_checklists.html', created=created, copied=copied, selected_game=selected_game)

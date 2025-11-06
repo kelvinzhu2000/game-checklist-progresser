@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Checklist, ChecklistItem, UserProgress
 
 @pytest.fixture
 def app():

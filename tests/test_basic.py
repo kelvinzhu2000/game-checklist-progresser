@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Checklist, ChecklistItem, UserProgress
 
 @pytest.fixture
 def app():
@@ -171,16 +171,12 @@ def test_user_checklist_progress(app):
         db.session.add_all([item1, item2])
         db.session.flush()
         
-        user_checklist = UserChecklist(user_id=user.id, checklist_id=checklist.id)
-        db.session.add(user_checklist)
-        db.session.flush()
-        
-        progress1 = UserProgress(user_checklist_id=user_checklist.id, item_id=item1.id, completed=True)
-        progress2 = UserProgress(user_checklist_id=user_checklist.id, item_id=item2.id, completed=False)
+        progress1 = UserProgress(checklist_id=checklist.id, item_id=item1.id, completed=True)
+        progress2 = UserProgress(checklist_id=checklist.id, item_id=item2.id, completed=False)
         db.session.add_all([progress1, progress2])
         db.session.commit()
         
-        assert user_checklist.get_progress_percentage() == 50
+        assert checklist.get_progress_percentage() == 50
 
 def test_delete_created_checklist(client, app):
     """Test deleting a checklist created by the user."""
@@ -261,21 +257,28 @@ def test_delete_copied_checklist(client, app):
         db.session.commit()
         user_id = user.id
         
-        checklist = Checklist(
+        # Create original checklist
+        original_checklist = Checklist(
             title='Test Checklist',
             game_name='Test Game',
             creator_id=user_id,
             is_public=True
         )
-        db.session.add(checklist)
+        db.session.add(original_checklist)
         db.session.commit()
-        checklist_id = checklist.id
+        original_id = original_checklist.id
         
         # Create a copy
-        user_checklist = UserChecklist(user_id=user_id, checklist_id=checklist_id)
-        db.session.add(user_checklist)
+        copied_checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user_id,
+            is_public=False,
+            parent_id=original_id
+        )
+        db.session.add(copied_checklist)
         db.session.commit()
-        user_checklist_id = user_checklist.id
+        copied_id = copied_checklist.id
     
     # Login
     client.post('/auth/login', data={
@@ -284,16 +287,16 @@ def test_delete_copied_checklist(client, app):
     })
     
     # Delete the copy
-    response = client.post(f'/checklist/{checklist_id}/delete-copy', follow_redirects=True)
+    response = client.post(f'/checklist/{copied_id}/delete', follow_redirects=True)
     assert response.status_code == 200
     
     with app.app_context():
-        # Verify user copy is deleted
-        deleted_user_checklist = db.session.get(UserChecklist, user_checklist_id)
-        assert deleted_user_checklist is None
+        # Verify copy is deleted
+        deleted_copy = db.session.get(Checklist, copied_id)
+        assert deleted_copy is None
         
         # But original checklist still exists
-        original_checklist = db.session.get(Checklist, checklist_id)
+        original_checklist = db.session.get(Checklist, original_id)
         assert original_checklist is not None
 
 def test_delete_copy_with_progress(client, app):
@@ -305,28 +308,40 @@ def test_delete_copy_with_progress(client, app):
         db.session.commit()
         user_id = user.id
         
-        checklist = Checklist(
+        # Create original checklist with item
+        original_checklist = Checklist(
             title='Test Checklist',
             game_name='Test Game',
             creator_id=user_id,
             is_public=True
         )
-        db.session.add(checklist)
+        db.session.add(original_checklist)
         db.session.commit()
-        checklist_id = checklist.id
+        original_id = original_checklist.id
         
-        item = ChecklistItem(checklist_id=checklist_id, title='Item 1', order=1)
-        db.session.add(item)
+        original_item = ChecklistItem(checklist_id=original_id, title='Item 1', order=1)
+        db.session.add(original_item)
         db.session.commit()
-        item_id = item.id
         
-        # Create a copy with progress
-        user_checklist = UserChecklist(user_id=user_id, checklist_id=checklist_id)
-        db.session.add(user_checklist)
+        # Create a copy with item
+        copied_checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user_id,
+            is_public=False,
+            parent_id=original_id
+        )
+        db.session.add(copied_checklist)
         db.session.commit()
-        user_checklist_id = user_checklist.id
+        copied_id = copied_checklist.id
         
-        progress = UserProgress(user_checklist_id=user_checklist_id, item_id=item_id, completed=True)
+        copied_item = ChecklistItem(checklist_id=copied_id, title='Item 1', order=1)
+        db.session.add(copied_item)
+        db.session.commit()
+        copied_item_id = copied_item.id
+        
+        # Add progress
+        progress = UserProgress(checklist_id=copied_id, item_id=copied_item_id, completed=True)
         db.session.add(progress)
         db.session.commit()
         progress_id = progress.id
@@ -338,20 +353,18 @@ def test_delete_copy_with_progress(client, app):
     })
     
     # Delete the copy
-    response = client.post(f'/checklist/{checklist_id}/delete-copy', follow_redirects=True)
+    response = client.post(f'/checklist/{copied_id}/delete', follow_redirects=True)
     assert response.status_code == 200
     
     with app.app_context():
-        # Verify user copy is deleted
-        deleted_user_checklist = db.session.get(UserChecklist, user_checklist_id)
-        assert deleted_user_checklist is None
+        # Verify copy is deleted
+        deleted_copy = db.session.get(Checklist, copied_id)
+        assert deleted_copy is None
         
         # Verify progress is also deleted (cascade delete)
         deleted_progress = db.session.get(UserProgress, progress_id)
         assert deleted_progress is None
         
         # But original checklist and items still exist
-        original_checklist = db.session.get(Checklist, checklist_id)
+        original_checklist = db.session.get(Checklist, original_id)
         assert original_checklist is not None
-        original_item = db.session.get(ChecklistItem, item_id)
-        assert original_item is not None

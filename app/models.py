@@ -17,10 +17,9 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
-    created_checklists = db.relationship('Checklist', backref='creator', lazy='dynamic', 
-                                        foreign_keys='Checklist.creator_id')
-    user_checklists = db.relationship('UserChecklist', backref='user', lazy='dynamic',
-                                     cascade='all, delete-orphan')
+    checklists = db.relationship('Checklist', backref='creator', lazy='dynamic', 
+                                 foreign_keys='Checklist.creator_id',
+                                 cascade='all, delete-orphan')
     
     def set_password(self, password):
         # Use pbkdf2:sha256 method for better compatibility across Python versions
@@ -42,14 +41,31 @@ class Checklist(db.Model):
     description = db.Column(db.Text)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     is_public = db.Column(db.Boolean, default=True, index=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     items = db.relationship('ChecklistItem', backref='checklist', lazy='dynamic',
                            cascade='all, delete-orphan', order_by='ChecklistItem.order')
-    user_copies = db.relationship('UserChecklist', backref='original_checklist', lazy='dynamic',
-                                 cascade='all, delete-orphan')
+    progress_items = db.relationship('UserProgress', backref='checklist', lazy='dynamic',
+                                    cascade='all, delete-orphan')
+    # Self-referential relationship for copies
+    children = db.relationship('Checklist', backref=db.backref('parent', remote_side=[id]),
+                              lazy='dynamic', cascade='all, delete-orphan')
+    
+    @property
+    def is_copy(self):
+        """Returns True if this checklist was copied from another checklist."""
+        return self.parent_id is not None
+    
+    def get_progress_percentage(self):
+        """Calculate the completion percentage for this checklist."""
+        total_items = self.items.count()
+        if total_items == 0:
+            return 0
+        completed_items = self.progress_items.filter_by(completed=True).count()
+        return int((completed_items / total_items) * 100)
     
     def __repr__(self):
         return f'<Checklist {self.title} for {self.game_name}>'
@@ -67,33 +83,11 @@ class ChecklistItem(db.Model):
     def __repr__(self):
         return f'<ChecklistItem {self.title}>'
 
-class UserChecklist(db.Model):
-    __tablename__ = 'user_checklists'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    checklist_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    progress_items = db.relationship('UserProgress', backref='user_checklist', lazy='dynamic',
-                                    cascade='all, delete-orphan')
-    
-    def get_progress_percentage(self):
-        total_items = ChecklistItem.query.filter_by(checklist_id=self.checklist_id).count()
-        if total_items == 0:
-            return 0
-        completed_items = self.progress_items.filter_by(completed=True).count()
-        return int((completed_items / total_items) * 100)
-    
-    def __repr__(self):
-        return f'<UserChecklist user_id={self.user_id} checklist_id={self.checklist_id}>'
-
 class UserProgress(db.Model):
     __tablename__ = 'user_progress'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_checklist_id = db.Column(db.Integer, db.ForeignKey('user_checklists.id'), nullable=False)
+    checklist_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), nullable=False)
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime)
