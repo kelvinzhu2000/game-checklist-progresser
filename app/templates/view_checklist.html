@@ -11,8 +11,10 @@
             <p class="description">{{ checklist.description }}</p>
         {% endif %}
         <p class="meta">Created by {{ checklist.creator.username }} on {{ checklist.created_at.strftime('%Y-%m-%d') }}</p>
-        {% if checklist.is_copy %}
+        {% if checklist.is_copy and checklist.parent %}
             <p class="copy-info">This is a copy of <a href="{{ url_for('checklist.view', checklist_id=checklist.parent_id) }}">{{ checklist.parent.title }}</a></p>
+        {% elif checklist.is_copy %}
+            <p class="copy-info">This is a copy (original checklist no longer available)</p>
         {% endif %}
         
         {% if current_user.is_authenticated %}

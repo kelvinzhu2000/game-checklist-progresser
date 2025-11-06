@@ -41,7 +41,7 @@ class Checklist(db.Model):
     description = db.Column(db.Text)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     is_public = db.Column(db.Boolean, default=True, index=True)
-    parent_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
