@@ -47,7 +47,7 @@ def browse():
     games = db.session.query(Game).join(
         Checklist, Game.id == Checklist.game_id
     ).filter(
-        Checklist.is_public == True
+        Checklist.is_public.is_(True)
     ).group_by(Game.id).order_by(Game.name).all()
     
     # Get checklist count for each game

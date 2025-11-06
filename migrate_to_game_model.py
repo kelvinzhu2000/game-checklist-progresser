@@ -133,8 +133,8 @@ def migrate_database():
             ))
             db.session.commit()
             print("✓ Added index on game_id")
-        except Exception as e:
-            print(f"  Note: Could not add foreign key constraint: {e}")
+        except Exception as db_error:
+            print(f"  Note: Could not add foreign key constraint: {db_error}")
             print("  This is expected for SQLite. The relationship will still work.")
         
         # Step 7: Drop game_name column (optional - commented out for safety)
@@ -151,9 +151,9 @@ def migrate_database():
         
         return True
         
-    except Exception as e:
+    except Exception as migration_error:
         db.session.rollback()
-        print(f"\n✗ Migration failed: {e}")
+        print(f"\n✗ Migration failed: {migration_error}")
         print("\nDatabase has been rolled back to previous state.")
         return False
 
@@ -170,9 +170,9 @@ def main():
         print("⚠️  WARNING: Make sure you have backed up your database!")
         print()
         
-        response = input("Do you want to proceed? (yes/no): ").strip().lower()
+        response = input("Do you want to proceed? (yes/y to confirm): ").strip().lower()
         
-        if response != 'yes':
+        if response not in ['yes', 'y']:
             print("\nMigration cancelled.")
             return
         
