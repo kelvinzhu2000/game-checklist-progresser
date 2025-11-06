@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
@@ -43,28 +43,37 @@ def index():
 @main_bp.route('/browse')
 def browse():
     """Browse public checklists by game."""
-    # Get all unique games from public checklists
-    games_query = db.session.query(
-        Checklist.game_name,
-        func.count(Checklist.id).label('checklist_count')
-    ).filter_by(is_public=True).group_by(Checklist.game_name).order_by(Checklist.game_name)
+    # Get all games that have public checklists
+    games = db.session.query(Game).join(
+        Checklist, Game.id == Checklist.game_id
+    ).filter(
+        Checklist.is_public == True
+    ).group_by(Game.id).order_by(Game.name).all()
     
-    games = games_query.all()
+    # Get checklist count for each game
+    game_counts = {}
+    for game in games:
+        count = Checklist.query.filter_by(is_public=True, game_id=game.id).count()
+        game_counts[game.id] = count
     
-    return render_template('browse.html', games=games)
+    return render_template('browse.html', games=games, game_counts=game_counts)
 
-@main_bp.route('/browse/<game_name>')
-def browse_game(game_name):
+@main_bp.route('/browse/<int:game_id>')
+def browse_game(game_id):
     """Browse checklists for a specific game."""
+    game = db.session.get(Game, game_id)
+    if not game:
+        abort(404)
+    
     page = request.args.get('page', 1, type=int)
     
-    query = Checklist.query.filter_by(is_public=True, game_name=game_name)
+    query = Checklist.query.filter_by(is_public=True, game_id=game_id)
     
     pagination = query.order_by(Checklist.created_at.desc()).paginate(
         page=page, per_page=20, error_out=False
     )
     
-    return render_template('browse_game.html', pagination=pagination, game_name=game_name)
+    return render_template('browse_game.html', pagination=pagination, game=game)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -122,9 +131,16 @@ def create():
         form.game_name.data = selected_game
     
     if form.validate_on_submit():
+        # Get or create the game
+        game = Game.query.filter_by(name=form.game_name.data).first()
+        if not game:
+            game = Game(name=form.game_name.data)
+            db.session.add(game)
+            db.session.flush()  # Get the game ID
+        
         checklist = Checklist(
             title=form.title.data,
-            game_name=form.game_name.data,
+            game_id=game.id,
             description=form.description.data,
             is_public=form.is_public.data,
             creator_id=current_user.id
@@ -237,7 +253,7 @@ def copy(checklist_id):
     if existing:
         flash('You already have a copy of this checklist!', 'warning')
         # Set the game context to the checklist's game
-        set_selected_game(checklist.game_name)
+        set_selected_game(checklist.game.name)
         return redirect(url_for('main.my_checklists'))
     
     user_checklist = UserChecklist(user_id=current_user.id, checklist_id=checklist_id)
@@ -255,7 +271,7 @@ def copy(checklist_id):
     db.session.commit()
     
     # Set the game context to the copied checklist's game
-    set_selected_game(checklist.game_name)
+    set_selected_game(checklist.game.name)
     
     flash('Checklist copied to your account!', 'success')
     return redirect(url_for('main.my_checklists'))
@@ -289,7 +305,7 @@ def delete(checklist_id):
     if checklist.creator_id != current_user.id:
         abort(403)
     
-    game_name = checklist.game_name
+    game_name = checklist.game.name
     try:
         db.session.delete(checklist)
         db.session.commit()
@@ -312,7 +328,7 @@ def delete_copy(checklist_id):
     ).first_or_404()
     
     checklist = Checklist.query.get_or_404(checklist_id)
-    game_name = checklist.game_name
+    game_name = checklist.game.name
     
     try:
         db.session.delete(user_checklist)
@@ -331,49 +347,56 @@ def delete_copy(checklist_id):
 def my_games():
     """Display list of games the user has checklists for."""
     # Get games from created checklists
-    created_games = db.session.query(Checklist.game_name).filter_by(
-        creator_id=current_user.id
+    created_games = db.session.query(Game).join(
+        Checklist, Game.id == Checklist.game_id
+    ).filter(
+        Checklist.creator_id == current_user.id
     ).distinct().all()
     
     # Get games from copied checklists
-    copied_games = db.session.query(Checklist.game_name).join(
+    copied_games = db.session.query(Game).join(
+        Checklist, Game.id == Checklist.game_id
+    ).join(
         UserChecklist, Checklist.id == UserChecklist.checklist_id
     ).filter(
         UserChecklist.user_id == current_user.id
     ).distinct().all()
     
     # Combine and deduplicate
-    all_games = set()
+    all_games_dict = {}
     for game in created_games:
-        all_games.add(game[0])
+        all_games_dict[game.id] = game
     for game in copied_games:
-        all_games.add(game[0])
+        all_games_dict[game.id] = game
     
-    # Sort games alphabetically
-    games = sorted(list(all_games))
+    # Sort games alphabetically by name
+    games = sorted(all_games_dict.values(), key=lambda g: g.name)
     
     # Get checklist count per game
     game_stats = {}
     for game in games:
-        created_count = current_user.created_checklists.filter_by(game_name=game).count()
+        created_count = current_user.created_checklists.filter_by(game_id=game.id).count()
         copied_count = db.session.query(UserChecklist).join(
             Checklist, Checklist.id == UserChecklist.checklist_id
         ).filter(
             UserChecklist.user_id == current_user.id,
-            Checklist.game_name == game
+            Checklist.game_id == game.id
         ).count()
-        game_stats[game] = {'created': created_count, 'copied': copied_count}
+        game_stats[game.id] = {'created': created_count, 'copied': copied_count}
     
     selected_game = get_selected_game()
     
     return render_template('my_games.html', games=games, game_stats=game_stats, selected_game=selected_game)
 
-@main_bp.route('/select-game/<game_name>')
+@main_bp.route('/select-game/<int:game_id>')
 @login_required
-def select_game(game_name):
+def select_game(game_id):
     """Select a game to view checklists for."""
-    set_selected_game(game_name)
-    flash(f'Selected game: {game_name}', 'success')
+    game = db.session.get(Game, game_id)
+    if not game:
+        abort(404)
+    set_selected_game(game.name)
+    flash(f'Selected game: {game.name}', 'success')
     return redirect(url_for('main.my_checklists'))
 
 @main_bp.route('/clear-game')
@@ -393,16 +416,24 @@ def my_checklists():
         # If no game selected, redirect to game selection
         return redirect(url_for('main.my_games'))
     
+    # Get the game by name
+    game = Game.query.filter_by(name=selected_game).first()
+    if not game:
+        # Game doesn't exist, clear selection and redirect
+        clear_selected_game()
+        flash('Selected game not found.', 'warning')
+        return redirect(url_for('main.my_games'))
+    
     # Filter checklists by selected game
     created = current_user.created_checklists.filter_by(
-        game_name=selected_game
+        game_id=game.id
     ).order_by(Checklist.created_at.desc()).all()
     
     copied = db.session.query(UserChecklist).join(
         Checklist, Checklist.id == UserChecklist.checklist_id
     ).filter(
         UserChecklist.user_id == current_user.id,
-        Checklist.game_name == selected_game
+        Checklist.game_id == game.id
     ).all()
     
     return render_template('my_checklists.html', created=created, copied=copied, selected_game=selected_game)

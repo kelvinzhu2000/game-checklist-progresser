@@ -6,7 +6,7 @@
 <div class="checklist-view">
     <div class="checklist-header">
         <h1>{{ checklist.title }}</h1>
-        <p class="game-name">Game: {{ checklist.game_name }}</p>
+        <p class="game-name">Game: {{ checklist.game.name }}</p>
         {% if checklist.description %}
             <p class="description">{{ checklist.description }}</p>
         {% endif %}

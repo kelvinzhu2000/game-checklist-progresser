@@ -33,12 +33,26 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+class Game(db.Model):
+    __tablename__ = 'games'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    checklists = db.relationship('Checklist', backref='game', lazy='dynamic',
+                                cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<Game {self.name}>'
+
 class Checklist(db.Model):
     __tablename__ = 'checklists'
     
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
-    game_name = db.Column(db.String(200), nullable=False, index=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('games.id'), nullable=False, index=True)
     description = db.Column(db.Text)
     creator_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     is_public = db.Column(db.Boolean, default=True, index=True)
@@ -52,7 +66,7 @@ class Checklist(db.Model):
                                  cascade='all, delete-orphan')
     
     def __repr__(self):
-        return f'<Checklist {self.title} for {self.game_name}>'
+        return f'<Checklist {self.title} for {self.game.name}>'
 
 class ChecklistItem(db.Model):
     __tablename__ = 'checklist_items'
