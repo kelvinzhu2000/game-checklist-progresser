@@ -28,7 +28,12 @@ def generate_checklist_items(game_name, title, prompt, description=""):
         return None
     
     try:
-        client = OpenAI(api_key=api_key)
+        # Initialize OpenAI client with timeout setting
+        # Use default httpx client which handles proxies automatically from environment
+        client = OpenAI(
+            api_key=api_key,
+            timeout=30.0
+        )
         
         # Construct the prompt
         system_message = (
