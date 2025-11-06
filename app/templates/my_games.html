@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}My Games - Game Checklist Progresser{% endblock %}
+
+{% block content %}
+<h1>My Games</h1>
+
+<p>Select a game to view and manage checklists for that game.</p>
+
+{% if games %}
+<div class="games-grid">
+    {% for game in games %}
+    <div class="game-card {% if selected_game == game %}selected{% endif %}">
+        <h3>{{ game }}</h3>
+        <p class="stats">
+            Created: {{ game_stats[game].created }}<br>
+            Tracking: {{ game_stats[game].copied }}
+        </p>
+        <div class="game-actions">
+            <a href="{{ url_for('main.select_game', game_name=game) }}" class="btn btn-primary">
+                {% if selected_game == game %}Currently Selected{% else %}Select Game{% endif %}
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if selected_game %}
+<div class="current-selection">
+    <p>Currently viewing: <strong>{{ selected_game }}</strong></p>
+    <a href="{{ url_for('main.my_checklists') }}" class="btn btn-success">View Checklists</a>
+    <a href="{{ url_for('main.clear_game') }}" class="btn btn-secondary">Clear Selection</a>
+</div>
+{% endif %}
+
+{% else %}
+<p>You don't have any checklists yet. <a href="{{ url_for('main.browse') }}">Browse public checklists</a> or <a href="{{ url_for('checklist.create') }}">create your first checklist</a>!</p>
+{% endif %}
+{% endblock %}

@@ -5,6 +5,9 @@
 {% block content %}
 <div class="form-container">
     <h1>Create New Checklist</h1>
+    {% if selected_game %}
+    <p class="info-message">Creating checklist for: <strong>{{ selected_game }}</strong></p>
+    {% endif %}
     <form method="POST" action="{{ url_for('checklist.create') }}">
         {{ form.hidden_tag() }}
         
