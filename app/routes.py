@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from app import db
 from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm
+from app.ai_service import generate_checklist_items
 from datetime import datetime
 from sqlalchemy import func
 
@@ -131,11 +132,36 @@ def create():
         db.session.add(checklist)
         db.session.commit()
         
+        # If AI prompt is provided, generate items
+        if form.ai_prompt.data and form.ai_prompt.data.strip():
+            generated_items = generate_checklist_items(
+                game_name=form.game_name.data,
+                title=form.title.data,
+                prompt=form.ai_prompt.data,
+                description=form.description.data or ""
+            )
+            
+            if generated_items:
+                # Add generated items to the checklist
+                for index, item_data in enumerate(generated_items):
+                    item = ChecklistItem(
+                        checklist_id=checklist.id,
+                        title=item_data['title'],
+                        description=item_data.get('description', ''),
+                        order=index + 1
+                    )
+                    db.session.add(item)
+                db.session.commit()
+                flash(f'Checklist created with {len(generated_items)} AI-generated items!', 'success')
+            else:
+                flash('Checklist created, but AI generation failed. Please add items manually.', 'warning')
+        else:
+            flash('Checklist created successfully! You can now add items.', 'success')
+        
         # Update selected game if it changed
         if form.game_name.data != selected_game:
             set_selected_game(form.game_name.data)
         
-        flash('Checklist created successfully!', 'success')
         return redirect(url_for('checklist.view', checklist_id=checklist.id))
     
     return render_template('create_checklist.html', form=form, selected_game=selected_game)

@@ -30,6 +30,8 @@ class ChecklistForm(FlaskForm):
     title = StringField('Checklist Title', validators=[DataRequired(), Length(max=200)])
     game_name = StringField('Game Name', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
+    ai_prompt = TextAreaField('AI Generation Prompt (Optional)', 
+                              description='Describe what items you want in this checklist, and AI will generate them for you.')
     is_public = BooleanField('Make Public', default=True)
     submit = SubmitField('Create Checklist')
 
