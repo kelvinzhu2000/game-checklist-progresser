@@ -181,3 +181,177 @@ def test_user_checklist_progress(app):
         db.session.commit()
         
         assert user_checklist.get_progress_percentage() == 50
+
+def test_delete_created_checklist(client, app):
+    """Test deleting a checklist created by the user."""
+    with app.app_context():
+        user = User(username='testuser', email='test@example.com')
+        user.set_password('password123')
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+        
+        checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user_id,
+            is_public=True
+        )
+        db.session.add(checklist)
+        db.session.commit()
+        checklist_id = checklist.id
+    
+    # Login
+    client.post('/auth/login', data={
+        'username': 'testuser',
+        'password': 'password123'
+    })
+    
+    # Delete the checklist
+    response = client.post(f'/checklist/{checklist_id}/delete', follow_redirects=True)
+    assert response.status_code == 200
+    
+    with app.app_context():
+        # Verify checklist is deleted
+        deleted_checklist = db.session.get(Checklist, checklist_id)
+        assert deleted_checklist is None
+
+def test_delete_created_checklist_unauthorized(client, app):
+    """Test that only the creator can delete their checklist."""
+    with app.app_context():
+        user1 = User(username='creator', email='creator@example.com')
+        user1.set_password('password123')
+        user2 = User(username='other', email='other@example.com')
+        user2.set_password('password123')
+        db.session.add_all([user1, user2])
+        db.session.commit()
+        user1_id = user1.id
+        
+        checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user1_id,
+            is_public=True
+        )
+        db.session.add(checklist)
+        db.session.commit()
+        checklist_id = checklist.id
+    
+    # Login as different user
+    client.post('/auth/login', data={
+        'username': 'other',
+        'password': 'password123'
+    })
+    
+    # Try to delete the checklist (should fail)
+    response = client.post(f'/checklist/{checklist_id}/delete')
+    assert response.status_code == 403
+    
+    with app.app_context():
+        # Verify checklist still exists
+        checklist = db.session.get(Checklist, checklist_id)
+        assert checklist is not None
+
+def test_delete_copied_checklist(client, app):
+    """Test deleting a copied checklist (removes user's copy)."""
+    with app.app_context():
+        user = User(username='testuser', email='test@example.com')
+        user.set_password('password123')
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+        
+        checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user_id,
+            is_public=True
+        )
+        db.session.add(checklist)
+        db.session.commit()
+        checklist_id = checklist.id
+        
+        # Create a copy
+        user_checklist = UserChecklist(user_id=user_id, checklist_id=checklist_id)
+        db.session.add(user_checklist)
+        db.session.commit()
+        user_checklist_id = user_checklist.id
+    
+    # Login
+    client.post('/auth/login', data={
+        'username': 'testuser',
+        'password': 'password123'
+    })
+    
+    # Delete the copy
+    response = client.post(f'/checklist/{checklist_id}/delete-copy', follow_redirects=True)
+    assert response.status_code == 200
+    
+    with app.app_context():
+        # Verify user copy is deleted
+        deleted_user_checklist = db.session.get(UserChecklist, user_checklist_id)
+        assert deleted_user_checklist is None
+        
+        # But original checklist still exists
+        original_checklist = db.session.get(Checklist, checklist_id)
+        assert original_checklist is not None
+
+def test_delete_copy_with_progress(client, app):
+    """Test that deleting a copied checklist also deletes progress."""
+    with app.app_context():
+        user = User(username='testuser', email='test@example.com')
+        user.set_password('password123')
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+        
+        checklist = Checklist(
+            title='Test Checklist',
+            game_name='Test Game',
+            creator_id=user_id,
+            is_public=True
+        )
+        db.session.add(checklist)
+        db.session.commit()
+        checklist_id = checklist.id
+        
+        item = ChecklistItem(checklist_id=checklist_id, title='Item 1', order=1)
+        db.session.add(item)
+        db.session.commit()
+        item_id = item.id
+        
+        # Create a copy with progress
+        user_checklist = UserChecklist(user_id=user_id, checklist_id=checklist_id)
+        db.session.add(user_checklist)
+        db.session.commit()
+        user_checklist_id = user_checklist.id
+        
+        progress = UserProgress(user_checklist_id=user_checklist_id, item_id=item_id, completed=True)
+        db.session.add(progress)
+        db.session.commit()
+        progress_id = progress.id
+    
+    # Login
+    client.post('/auth/login', data={
+        'username': 'testuser',
+        'password': 'password123'
+    })
+    
+    # Delete the copy
+    response = client.post(f'/checklist/{checklist_id}/delete-copy', follow_redirects=True)
+    assert response.status_code == 200
+    
+    with app.app_context():
+        # Verify user copy is deleted
+        deleted_user_checklist = db.session.get(UserChecklist, user_checklist_id)
+        assert deleted_user_checklist is None
+        
+        # Verify progress is also deleted (cascade delete)
+        deleted_progress = db.session.get(UserProgress, progress_id)
+        assert deleted_progress is None
+        
+        # But original checklist and items still exist
+        original_checklist = db.session.get(Checklist, checklist_id)
+        assert original_checklist is not None
+        original_item = db.session.get(ChecklistItem, item_id)
+        assert original_item is not None
