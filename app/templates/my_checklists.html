@@ -20,7 +20,7 @@
         {% for checklist in created %}
         <div class="checklist-card">
             <h3><a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}">{{ checklist.title }}</a></h3>
-            <p class="game-name">{{ checklist.game_name }}</p>
+            <p class="game-name">{{ checklist.game.name }}</p>
             <p class="item-count">{{ checklist.items.count() }} items</p>
             <p class="copies">{{ checklist.user_copies.count() }} copies</p>
             <p class="visibility">{% if checklist.is_public %}Public{% else %}Private{% endif %}</p>
@@ -42,7 +42,7 @@
         {% for user_checklist in copied %}
         <div class="checklist-card">
             <h3><a href="{{ url_for('checklist.view', checklist_id=user_checklist.checklist_id) }}">{{ user_checklist.original_checklist.title }}</a></h3>
-            <p class="game-name">{{ user_checklist.original_checklist.game_name }}</p>
+            <p class="game-name">{{ user_checklist.original_checklist.game.name }}</p>
             <p class="progress-percentage">Progress: {{ user_checklist.get_progress_percentage() }}%</p>
             <div class="progress-bar">
                 <div class="progress-fill" style="width: {{ user_checklist.get_progress_percentage() }}%"></div>

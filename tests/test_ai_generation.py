@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Checklist, ChecklistItem
+from app.models import User, Game, Checklist, ChecklistItem
 from app.ai_service import generate_checklist_items
 
 

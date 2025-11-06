@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}{{ game_name }} Checklists - Game Checklist Progresser{% endblock %}
+{% block title %}{{ game.name }} Checklists - Game Checklist Progresser{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Browse Checklists - {{ game_name }}</h1>
+    <h1>Browse Checklists - {{ game.name }}</h1>
     <div class="game-context">
-        <p>Viewing public checklists for: <strong>{{ game_name }}</strong></p>
+        <p>Viewing public checklists for: <strong>{{ game.name }}</strong></p>
         <a href="{{ url_for('main.browse') }}" class="btn btn-secondary">Back to Games</a>
     </div>
 </div>
@@ -16,7 +16,7 @@
     {% for checklist in pagination.items %}
     <div class="checklist-card">
         <h3><a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}">{{ checklist.title }}</a></h3>
-        <p class="game-name">{{ checklist.game_name }}</p>
+        <p class="game-name">{{ checklist.game.name }}</p>
         {% if checklist.description %}
             <p class="description">{{ checklist.description[:100] }}{% if checklist.description|length > 100 %}...{% endif %}</p>
         {% endif %}
@@ -33,13 +33,13 @@
 
 <div class="pagination">
     {% if pagination.has_prev %}
-        <a href="{{ url_for('main.browse_game', game_name=game_name, page=pagination.prev_num) }}" class="btn">Previous</a>
+        <a href="{{ url_for('main.browse_game', game_id=game.id, page=pagination.prev_num) }}" class="btn">Previous</a>
     {% endif %}
     
     <span>Page {{ pagination.page }} of {{ pagination.pages }}</span>
     
     {% if pagination.has_next %}
-        <a href="{{ url_for('main.browse_game', game_name=game_name, page=pagination.next_num) }}" class="btn">Next</a>
+        <a href="{{ url_for('main.browse_game', game_id=game.id, page=pagination.next_num) }}" class="btn">Next</a>
     {% endif %}
 </div>
 {% else %}

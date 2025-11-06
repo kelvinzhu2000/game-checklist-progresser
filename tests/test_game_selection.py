@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress
 
 @pytest.fixture
 def app():
@@ -51,16 +51,22 @@ def test_my_games_shows_user_games(authenticated_user, app):
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
+        # Create games
+        game1 = Game(name='The Legend of Zelda')
+        game2 = Game(name='Super Mario Bros')
+        db.session.add_all([game1, game2])
+        db.session.commit()
+        
         # Create checklists for different games
         checklist1 = Checklist(
             title='Zelda Checklist',
-            game_name='The Legend of Zelda',
+            game_id=game1.id,
             creator_id=user.id,
             is_public=True
         )
         checklist2 = Checklist(
             title='Mario Checklist',
-            game_name='Super Mario Bros',
+            game_id=game2.id,
             creator_id=user.id,
             is_public=True
         )
@@ -76,16 +82,22 @@ def test_select_game(authenticated_user, app):
     """Test selecting a game."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
+        
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user.id,
             is_public=True
         )
         db.session.add(checklist)
         db.session.commit()
     
-    response = authenticated_user.get('/select-game/Test Game', follow_redirects=True)
+    response = authenticated_user.get(f'/select-game/{game_id}', follow_redirects=True)
     assert response.status_code == 200
     assert b'Test Game' in response.data
 
@@ -100,24 +112,31 @@ def test_my_checklists_with_selected_game(authenticated_user, app):
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
+        # Create games
+        game1 = Game(name='The Legend of Zelda')
+        game2 = Game(name='Super Mario Bros')
+        db.session.add_all([game1, game2])
+        db.session.commit()
+        
         # Create checklists for different games
         checklist1 = Checklist(
             title='Zelda Quest',
-            game_name='The Legend of Zelda',
+            game_id=game1.id,
             creator_id=user.id,
             is_public=True
         )
         checklist2 = Checklist(
             title='Mario Quest',
-            game_name='Super Mario Bros',
+            game_id=game2.id,
             creator_id=user.id,
             is_public=True
         )
         db.session.add_all([checklist1, checklist2])
         db.session.commit()
+        game1_id = game1.id
     
     # Select Zelda game
-    authenticated_user.get('/select-game/The Legend of Zelda')
+    authenticated_user.get(f'/select-game/{game1_id}')
     
     # Check my checklists page
     response = authenticated_user.get('/my-checklists')
@@ -129,9 +148,15 @@ def test_clear_game_selection(authenticated_user, app):
     """Test clearing the game selection."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
+        
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user.id,
             is_public=True
         )
@@ -139,7 +164,7 @@ def test_clear_game_selection(authenticated_user, app):
         db.session.commit()
     
     # Select a game
-    authenticated_user.get('/select-game/Test Game')
+    authenticated_user.get(f'/select-game/{game_id}')
     
     # Clear selection
     response = authenticated_user.get('/clear-game', follow_redirects=True)
@@ -150,9 +175,15 @@ def test_create_checklist_with_selected_game(authenticated_user, app):
     """Test that create checklist pre-fills the game name when a game is selected."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
+        
+        game = Game(name='Selected Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Existing Checklist',
-            game_name='Selected Game',
+            game_id=game_id,
             creator_id=user.id,
             is_public=True
         )
@@ -160,7 +191,7 @@ def test_create_checklist_with_selected_game(authenticated_user, app):
         db.session.commit()
     
     # Select a game
-    authenticated_user.get('/select-game/Selected Game')
+    authenticated_user.get(f'/select-game/{game_id}')
     
     # Visit create page
     response = authenticated_user.get('/checklist/create')
@@ -176,9 +207,13 @@ def test_copy_checklist_sets_game_context(authenticated_user, app):
         db.session.add(creator)
         db.session.flush()
         
+        game = Game(name='Adventure Game')
+        db.session.add(game)
+        db.session.flush()
+        
         checklist = Checklist(
             title='Public Checklist',
-            game_name='Adventure Game',
+            game_id=game.id,
             creator_id=creator.id,
             is_public=True
         )
@@ -196,16 +231,21 @@ def test_game_stats_in_my_games(authenticated_user, app):
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         # Create 2 checklists for the same game
         checklist1 = Checklist(
             title='Checklist 1',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user.id,
             is_public=True
         )
         checklist2 = Checklist(
             title='Checklist 2',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user.id,
             is_public=True
         )

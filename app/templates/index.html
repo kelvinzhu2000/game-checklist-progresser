@@ -39,7 +39,7 @@
         {% for checklist in checklists %}
         <div class="checklist-card">
             <h3><a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}">{{ checklist.title }}</a></h3>
-            <p class="game-name">{{ checklist.game_name }}</p>
+            <p class="game-name">{{ checklist.game.name }}</p>
             <p class="creator">By {{ checklist.creator.username }}</p>
             <p class="item-count">{{ checklist.items.count() }} items</p>
         </div>

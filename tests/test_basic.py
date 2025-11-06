@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Checklist, ChecklistItem, UserChecklist, UserProgress
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress
 
 @pytest.fixture
 def app():
@@ -109,7 +109,11 @@ def test_checklist_creation(client, app):
     with app.app_context():
         checklist = Checklist.query.filter_by(title='Test Checklist').first()
         assert checklist is not None
-        assert checklist.game_name == 'Test Game'
+        assert checklist.game.name == 'Test Game'
+        
+        # Verify game was created
+        game = Game.query.filter_by(name='Test Game').first()
+        assert game is not None
 
 def test_browse_checklists(client, app):
     """Test browsing checklists by game."""
@@ -120,9 +124,15 @@ def test_browse_checklists(client, app):
         db.session.commit()
         user_id = user.id
         
+        # Create game
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Public Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user_id,
             is_public=True
         )
@@ -135,7 +145,7 @@ def test_browse_checklists(client, app):
         assert b'Test Game' in response.data
         
         # Test browse specific game page
-        response = client.get('/browse/Test Game')
+        response = client.get(f'/browse/{game_id}')
         assert response.status_code == 200
         assert b'Public Checklist' in response.data
 
@@ -157,9 +167,13 @@ def test_user_checklist_progress(app):
         db.session.add(user)
         db.session.flush()
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.flush()
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game.id,
             creator_id=user.id,
             is_public=True
         )
@@ -191,9 +205,14 @@ def test_delete_created_checklist(client, app):
         db.session.commit()
         user_id = user.id
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user_id,
             is_public=True
         )
@@ -227,9 +246,14 @@ def test_delete_created_checklist_unauthorized(client, app):
         db.session.commit()
         user1_id = user1.id
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user1_id,
             is_public=True
         )
@@ -261,9 +285,14 @@ def test_delete_copied_checklist(client, app):
         db.session.commit()
         user_id = user.id
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user_id,
             is_public=True
         )
@@ -305,9 +334,14 @@ def test_delete_copy_with_progress(client, app):
         db.session.commit()
         user_id = user.id
         
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        game_id = game.id
+        
         checklist = Checklist(
             title='Test Checklist',
-            game_name='Test Game',
+            game_id=game_id,
             creator_id=user_id,
             is_public=True
         )
