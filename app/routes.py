@@ -41,18 +41,29 @@ def index():
 
 @main_bp.route('/browse')
 def browse():
-    page = request.args.get('page', 1, type=int)
-    game = request.args.get('game', '', type=str)
+    """Browse public checklists by game."""
+    # Get all unique games from public checklists
+    games_query = db.session.query(
+        Checklist.game_name,
+        func.count(Checklist.id).label('checklist_count')
+    ).filter_by(is_public=True).group_by(Checklist.game_name).order_by(Checklist.game_name)
     
-    query = Checklist.query.filter_by(is_public=True)
-    if game:
-        query = query.filter(Checklist.game_name.ilike(f'%{game}%'))
+    games = games_query.all()
+    
+    return render_template('browse.html', games=games)
+
+@main_bp.route('/browse/<game_name>')
+def browse_game(game_name):
+    """Browse checklists for a specific game."""
+    page = request.args.get('page', 1, type=int)
+    
+    query = Checklist.query.filter_by(is_public=True, game_name=game_name)
     
     pagination = query.order_by(Checklist.created_at.desc()).paginate(
         page=page, per_page=20, error_out=False
     )
     
-    return render_template('browse.html', pagination=pagination, game=game)
+    return render_template('browse_game.html', pagination=pagination, game_name=game_name)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():

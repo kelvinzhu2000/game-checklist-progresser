@@ -112,7 +112,7 @@ def test_checklist_creation(client, app):
         assert checklist.game_name == 'Test Game'
 
 def test_browse_checklists(client, app):
-    """Test browsing checklists."""
+    """Test browsing checklists by game."""
     with app.app_context():
         user = User(username='testuser', email='test@example.com')
         user.set_password('password123')
@@ -129,7 +129,13 @@ def test_browse_checklists(client, app):
         db.session.add(checklist)
         db.session.commit()
         
+        # Test browse games page
         response = client.get('/browse')
+        assert response.status_code == 200
+        assert b'Test Game' in response.data
+        
+        # Test browse specific game page
+        response = client.get('/browse/Test Game')
         assert response.status_code == 200
         assert b'Public Checklist' in response.data
 
