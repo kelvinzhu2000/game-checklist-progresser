@@ -113,14 +113,14 @@ def test_ai_service_handles_exception():
 def test_create_checklist_with_ai_prompt(client, app):
     """Test creating a checklist with AI generation."""
     with app.app_context():
-        user = User(username='testuser', email='test@example.com')
+        user = User(username='aiuser1', email='aiuser1@example.com')
         user.set_password('password123')
         db.session.add(user)
         db.session.commit()
     
     # Login
     client.post('/auth/login', data={
-        'username': 'testuser',
+        'username': 'aiuser1',
         'password': 'password123'
     })
     
@@ -157,14 +157,14 @@ def test_create_checklist_with_ai_prompt(client, app):
 def test_create_checklist_with_failed_ai_generation(client, app):
     """Test creating a checklist when AI generation fails."""
     with app.app_context():
-        user = User(username='testuser', email='test@example.com')
+        user = User(username='aiuser2', email='aiuser2@example.com')
         user.set_password('password123')
         db.session.add(user)
         db.session.commit()
     
     # Login
     client.post('/auth/login', data={
-        'username': 'testuser',
+        'username': 'aiuser2',
         'password': 'password123'
     })
     
@@ -194,14 +194,14 @@ def test_create_checklist_with_failed_ai_generation(client, app):
 def test_create_checklist_without_ai_prompt(client, app):
     """Test creating a checklist without AI prompt still works."""
     with app.app_context():
-        user = User(username='testuser', email='test@example.com')
+        user = User(username='aiuser3', email='aiuser3@example.com')
         user.set_password('password123')
         db.session.add(user)
         db.session.commit()
     
     # Login
     client.post('/auth/login', data={
-        'username': 'testuser',
+        'username': 'aiuser3',
         'password': 'password123'
     })
     
