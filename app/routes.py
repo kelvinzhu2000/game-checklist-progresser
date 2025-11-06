@@ -290,10 +290,13 @@ def delete(checklist_id):
         abort(403)
     
     game_name = checklist.game_name
-    db.session.delete(checklist)
-    db.session.commit()
-    
-    flash('Checklist deleted successfully!', 'success')
+    try:
+        db.session.delete(checklist)
+        db.session.commit()
+        flash('Checklist deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while deleting the checklist.', 'error')
     
     # Redirect back to my checklists with the same game selected
     set_selected_game(game_name)
@@ -311,10 +314,13 @@ def delete_copy(checklist_id):
     checklist = Checklist.query.get_or_404(checklist_id)
     game_name = checklist.game_name
     
-    db.session.delete(user_checklist)
-    db.session.commit()
-    
-    flash('Checklist copy removed from your account!', 'success')
+    try:
+        db.session.delete(user_checklist)
+        db.session.commit()
+        flash('Checklist copy removed from your account!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while removing the checklist copy.', 'error')
     
     # Redirect back to my checklists with the same game selected
     set_selected_game(game_name)
