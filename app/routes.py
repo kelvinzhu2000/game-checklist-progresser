@@ -40,40 +40,89 @@ def index():
     public_checklists = Checklist.query.filter_by(is_public=True).order_by(Checklist.created_at.desc()).limit(10).all()
     return render_template('index.html', checklists=public_checklists)
 
-@main_bp.route('/browse')
-def browse():
-    """Browse public checklists by game."""
-    # Get all games that have public checklists
-    games = db.session.query(Game).join(
-        Checklist, Game.id == Checklist.game_id
-    ).filter(
-        Checklist.is_public.is_(True)
-    ).group_by(Game.id).order_by(Game.name).all()
+@main_bp.route('/games')
+def games():
+    """Unified games page showing all games with search capability."""
+    search_query = request.args.get('search', '').strip()
     
-    # Get checklist count for each game
-    game_counts = {}
-    for game in games:
-        count = Checklist.query.filter_by(is_public=True, game_id=game.id).count()
-        game_counts[game.id] = count
+    # Get all games
+    if search_query:
+        games_list = Game.query.filter(Game.name.ilike(f'%{search_query}%')).order_by(Game.name).all()
+    else:
+        games_list = Game.query.order_by(Game.name).all()
     
-    return render_template('browse.html', games=games, game_counts=game_counts)
+    # For authenticated users, get their stats
+    game_stats = {}
+    if current_user.is_authenticated:
+        for game in games_list:
+            # Count public checklists for this game
+            public_count = Checklist.query.filter_by(is_public=True, game_id=game.id).count()
+            # Count user's created checklists
+            created_count = current_user.created_checklists.filter_by(game_id=game.id).count()
+            # Count user's copied checklists
+            copied_count = db.session.query(UserChecklist).join(
+                Checklist, Checklist.id == UserChecklist.checklist_id
+            ).filter(
+                UserChecklist.user_id == current_user.id,
+                Checklist.game_id == game.id
+            ).count()
+            game_stats[game.id] = {
+                'public': public_count,
+                'created': created_count,
+                'copied': copied_count
+            }
+    else:
+        # For non-authenticated users, just show public counts
+        for game in games_list:
+            public_count = Checklist.query.filter_by(is_public=True, game_id=game.id).count()
+            game_stats[game.id] = {'public': public_count}
+    
+    return render_template('games.html', games=games_list, game_stats=game_stats, search_query=search_query)
 
-@main_bp.route('/browse/<int:game_id>')
-def browse_game(game_id):
-    """Browse checklists for a specific game."""
+@main_bp.route('/games/<int:game_id>')
+def game_detail(game_id):
+    """Game detail page showing all checklists for a game."""
     game = db.session.get(Game, game_id)
     if not game:
         abort(404)
     
     page = request.args.get('page', 1, type=int)
     
-    query = Checklist.query.filter_by(is_public=True, game_id=game_id)
+    # Get public checklists for this game
+    public_checklists = Checklist.query.filter_by(
+        is_public=True, 
+        game_id=game_id
+    ).order_by(Checklist.created_at.desc()).all()
     
-    pagination = query.order_by(Checklist.created_at.desc()).paginate(
-        page=page, per_page=20, error_out=False
-    )
+    # Get user's checklists for this game if authenticated
+    user_created = []
+    user_copied = []
+    if current_user.is_authenticated:
+        user_created = current_user.created_checklists.filter_by(
+            game_id=game_id
+        ).order_by(Checklist.created_at.desc()).all()
+        
+        user_copied = db.session.query(UserChecklist).join(
+            Checklist, Checklist.id == UserChecklist.checklist_id
+        ).filter(
+            UserChecklist.user_id == current_user.id,
+            Checklist.game_id == game_id
+        ).all()
     
-    return render_template('browse_game.html', pagination=pagination, game=game)
+    return render_template('game_detail.html', game=game, 
+                         public_checklists=public_checklists,
+                         user_created=user_created,
+                         user_copied=user_copied)
+
+@main_bp.route('/browse')
+def browse():
+    """Legacy route - redirect to games page."""
+    return redirect(url_for('main.games'))
+
+@main_bp.route('/browse/<int:game_id>')
+def browse_game(game_id):
+    """Legacy route - redirect to game detail page."""
+    return redirect(url_for('main.game_detail', game_id=game_id))
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
@@ -120,15 +169,21 @@ def logout():
     return redirect(url_for('main.index'))
 
 @checklist_bp.route('/create', methods=['GET', 'POST'])
+@checklist_bp.route('/create/<int:game_id>', methods=['GET', 'POST'])
 @login_required
-def create():
-    selected_game = get_selected_game()
+def create(game_id=None):
+    """Create a new checklist, optionally for a specific game."""
+    game = None
+    if game_id:
+        game = db.session.get(Game, game_id)
+        if not game:
+            abort(404)
     
     form = ChecklistForm()
     
-    # Pre-populate game_name if a game is selected
-    if request.method == 'GET' and selected_game:
-        form.game_name.data = selected_game
+    # Pre-populate game_name if a game is specified
+    if request.method == 'GET' and game:
+        form.game_name.data = game.name
     
     if form.validate_on_submit():
         # Get or create the game
@@ -174,13 +229,9 @@ def create():
         else:
             flash('Checklist created successfully! You can now add items.', 'success')
         
-        # Update selected game if it changed
-        if form.game_name.data != selected_game:
-            set_selected_game(form.game_name.data)
-        
         return redirect(url_for('checklist.view', checklist_id=checklist.id))
     
-    return render_template('create_checklist.html', form=form, selected_game=selected_game)
+    return render_template('create_checklist.html', form=form, game=game)
 
 @checklist_bp.route('/<int:checklist_id>')
 def view(checklist_id):
@@ -252,9 +303,7 @@ def copy(checklist_id):
     
     if existing:
         flash('You already have a copy of this checklist!', 'warning')
-        # Set the game context to the checklist's game
-        set_selected_game(checklist.game.name)
-        return redirect(url_for('main.my_checklists'))
+        return redirect(url_for('main.game_detail', game_id=checklist.game_id))
     
     user_checklist = UserChecklist(user_id=current_user.id, checklist_id=checklist_id)
     db.session.add(user_checklist)
@@ -270,11 +319,8 @@ def copy(checklist_id):
     
     db.session.commit()
     
-    # Set the game context to the copied checklist's game
-    set_selected_game(checklist.game.name)
-    
     flash('Checklist copied to your account!', 'success')
-    return redirect(url_for('main.my_checklists'))
+    return redirect(url_for('main.game_detail', game_id=checklist.game_id))
 
 @checklist_bp.route('/<int:checklist_id>/progress/<int:item_id>/toggle', methods=['POST'])
 @login_required
@@ -305,7 +351,7 @@ def delete(checklist_id):
     if checklist.creator_id != current_user.id:
         abort(403)
     
-    game_name = checklist.game.name
+    game_id = checklist.game_id
     try:
         db.session.delete(checklist)
         db.session.commit()
@@ -314,9 +360,8 @@ def delete(checklist_id):
         db.session.rollback()
         flash('An error occurred while deleting the checklist.', 'error')
     
-    # Redirect back to my checklists with the same game selected
-    set_selected_game(game_name)
-    return redirect(url_for('main.my_checklists'))
+    # Redirect back to the game detail page
+    return redirect(url_for('main.game_detail', game_id=game_id))
 
 @checklist_bp.route('/<int:checklist_id>/delete-copy', methods=['POST'])
 @login_required
@@ -328,7 +373,7 @@ def delete_copy(checklist_id):
     ).first_or_404()
     
     checklist = Checklist.query.get_or_404(checklist_id)
-    game_name = checklist.game.name
+    game_id = checklist.game_id
     
     try:
         db.session.delete(user_checklist)
@@ -338,102 +383,29 @@ def delete_copy(checklist_id):
         db.session.rollback()
         flash('An error occurred while removing the checklist copy.', 'error')
     
-    # Redirect back to my checklists with the same game selected
-    set_selected_game(game_name)
-    return redirect(url_for('main.my_checklists'))
+    # Redirect back to the game detail page
+    return redirect(url_for('main.game_detail', game_id=game_id))
 
 @main_bp.route('/my-games')
 @login_required
 def my_games():
-    """Display list of games the user has checklists for."""
-    # Get games from created checklists
-    created_games = db.session.query(Game).join(
-        Checklist, Game.id == Checklist.game_id
-    ).filter(
-        Checklist.creator_id == current_user.id
-    ).distinct().all()
-    
-    # Get games from copied checklists
-    copied_games = db.session.query(Game).join(
-        Checklist, Game.id == Checklist.game_id
-    ).join(
-        UserChecklist, Checklist.id == UserChecklist.checklist_id
-    ).filter(
-        UserChecklist.user_id == current_user.id
-    ).distinct().all()
-    
-    # Combine and deduplicate
-    all_games_dict = {}
-    for game in created_games:
-        all_games_dict[game.id] = game
-    for game in copied_games:
-        all_games_dict[game.id] = game
-    
-    # Sort games alphabetically by name
-    games = sorted(all_games_dict.values(), key=lambda g: g.name)
-    
-    # Get checklist count per game
-    game_stats = {}
-    for game in games:
-        created_count = current_user.created_checklists.filter_by(game_id=game.id).count()
-        copied_count = db.session.query(UserChecklist).join(
-            Checklist, Checklist.id == UserChecklist.checklist_id
-        ).filter(
-            UserChecklist.user_id == current_user.id,
-            Checklist.game_id == game.id
-        ).count()
-        game_stats[game.id] = {'created': created_count, 'copied': copied_count}
-    
-    selected_game = get_selected_game()
-    
-    return render_template('my_games.html', games=games, game_stats=game_stats, selected_game=selected_game)
+    """Legacy route - redirect to games page."""
+    return redirect(url_for('main.games'))
 
 @main_bp.route('/select-game/<int:game_id>')
 @login_required
 def select_game(game_id):
-    """Select a game to view checklists for."""
-    game = db.session.get(Game, game_id)
-    if not game:
-        abort(404)
-    set_selected_game(game.name)
-    flash(f'Selected game: {game.name}', 'success')
-    return redirect(url_for('main.my_checklists'))
+    """Legacy route - redirect to game detail page."""
+    return redirect(url_for('main.game_detail', game_id=game_id))
 
 @main_bp.route('/clear-game')
 @login_required
 def clear_game():
-    """Clear the selected game."""
-    clear_selected_game()
-    flash('Game selection cleared. Viewing all games.', 'info')
-    return redirect(url_for('main.my_games'))
+    """Legacy route - redirect to games page."""
+    return redirect(url_for('main.games'))
 
 @main_bp.route('/my-checklists')
 @login_required
 def my_checklists():
-    selected_game = get_selected_game()
-    
-    if not selected_game:
-        # If no game selected, redirect to game selection
-        return redirect(url_for('main.my_games'))
-    
-    # Get the game by name
-    game = Game.query.filter_by(name=selected_game).first()
-    if not game:
-        # Game doesn't exist, clear selection and redirect
-        clear_selected_game()
-        flash('Selected game not found.', 'warning')
-        return redirect(url_for('main.my_games'))
-    
-    # Filter checklists by selected game
-    created = current_user.created_checklists.filter_by(
-        game_id=game.id
-    ).order_by(Checklist.created_at.desc()).all()
-    
-    copied = db.session.query(UserChecklist).join(
-        Checklist, Checklist.id == UserChecklist.checklist_id
-    ).filter(
-        UserChecklist.user_id == current_user.id,
-        Checklist.game_id == game.id
-    ).all()
-    
-    return render_template('my_checklists.html', created=created, copied=copied, selected_game=selected_game)
+    """Legacy route - redirect to games page."""
+    return redirect(url_for('main.games'))
