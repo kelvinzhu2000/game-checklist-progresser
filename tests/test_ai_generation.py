@@ -1,6 +1,7 @@
 import pytest
 import sys
 import os
+import json
 from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -50,7 +51,7 @@ def test_ai_service_with_valid_response():
     
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.content = str(mock_items).replace("'", '"')
+    mock_response.choices[0].message.content = json.dumps(mock_items)
     
     with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
         with patch('app.ai_service.OpenAI') as mock_openai:
@@ -73,7 +74,7 @@ def test_ai_service_with_valid_response():
 def test_ai_service_with_markdown_wrapped_json():
     """Test AI service handles markdown-wrapped JSON responses."""
     mock_items = [{"title": "Item 1", "description": "Desc 1"}]
-    json_str = str(mock_items).replace("'", '"')
+    json_str = json.dumps(mock_items)
     
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]

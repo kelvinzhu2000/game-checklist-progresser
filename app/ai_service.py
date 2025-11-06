@@ -3,7 +3,10 @@ AI Service for generating checklist items using OpenAI.
 """
 import os
 import json
+import logging
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 def generate_checklist_items(game_name, title, prompt, description=""):
@@ -89,6 +92,6 @@ User Request: {prompt}"""
         return valid_items if valid_items else None
         
     except Exception as e:
-        # Log error in production, for now just return None
-        print(f"Error generating checklist items: {e}")
+        # Log error for debugging
+        logger.error(f"Error generating checklist items: {e}")
         return None
