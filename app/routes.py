@@ -279,6 +279,53 @@ def toggle_progress(checklist_id, item_id):
     
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
 
+@checklist_bp.route('/<int:checklist_id>/delete', methods=['POST'])
+@login_required
+def delete(checklist_id):
+    """Delete a checklist that the user created."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    # Only the creator can delete their checklist
+    if checklist.creator_id != current_user.id:
+        abort(403)
+    
+    game_name = checklist.game_name
+    try:
+        db.session.delete(checklist)
+        db.session.commit()
+        flash('Checklist deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while deleting the checklist.', 'error')
+    
+    # Redirect back to my checklists with the same game selected
+    set_selected_game(game_name)
+    return redirect(url_for('main.my_checklists'))
+
+@checklist_bp.route('/<int:checklist_id>/delete-copy', methods=['POST'])
+@login_required
+def delete_copy(checklist_id):
+    """Delete a user's copy of a checklist (removes their progress)."""
+    user_checklist = UserChecklist.query.filter_by(
+        user_id=current_user.id,
+        checklist_id=checklist_id
+    ).first_or_404()
+    
+    checklist = Checklist.query.get_or_404(checklist_id)
+    game_name = checklist.game_name
+    
+    try:
+        db.session.delete(user_checklist)
+        db.session.commit()
+        flash('Checklist copy removed from your account!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while removing the checklist copy.', 'error')
+    
+    # Redirect back to my checklists with the same game selected
+    set_selected_game(game_name)
+    return redirect(url_for('main.my_checklists'))
+
 @main_bp.route('/my-games')
 @login_required
 def my_games():
