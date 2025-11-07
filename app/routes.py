@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
 from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress
-from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm, GameForm
+from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm, GameForm, ChecklistEditForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
 from sqlalchemy import func
@@ -274,6 +274,68 @@ def view(checklist_id):
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
                          user_copy=user_copy, progress=progress)
+
+@checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit(checklist_id):
+    """Edit a checklist that the user created."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    # Only the creator can edit their checklist
+    if checklist.creator_id != current_user.id:
+        abort(403)
+    
+    form = ChecklistEditForm()
+    
+    if form.validate_on_submit():
+        # Update basic checklist information
+        checklist.title = form.title.data
+        checklist.description = form.description.data
+        checklist.is_public = form.is_public.data
+        
+        # If AI prompt is provided, generate additional items
+        if form.ai_prompt.data and form.ai_prompt.data.strip():
+            generated_items = generate_checklist_items(
+                game_name=checklist.game.name,
+                title=form.title.data,
+                prompt=form.ai_prompt.data,
+                description=form.description.data or ""
+            )
+            
+            if generated_items:
+                # Get the max order to append new items
+                max_order = db.session.query(db.func.max(ChecklistItem.order)).filter_by(
+                    checklist_id=checklist_id
+                ).scalar() or 0
+                
+                # Add generated items to the checklist
+                for index, item_data in enumerate(generated_items):
+                    item = ChecklistItem(
+                        checklist_id=checklist.id,
+                        title=item_data['title'],
+                        description=item_data.get('description', ''),
+                        order=max_order + index + 1
+                    )
+                    db.session.add(item)
+                
+                db.session.commit()
+                flash(f'Checklist updated with {len(generated_items)} AI-generated items!', 'success')
+            else:
+                db.session.commit()
+                flash('Checklist updated, but AI generation failed.', 'warning')
+        else:
+            db.session.commit()
+            flash('Checklist updated successfully!', 'success')
+        
+        return redirect(url_for('checklist.view', checklist_id=checklist.id))
+    
+    # Pre-populate form with existing data
+    if request.method == 'GET':
+        form.title.data = checklist.title
+        form.description.data = checklist.description
+        form.is_public.data = checklist.is_public
+    
+    return render_template('edit_checklist.html', form=form, checklist=checklist)
 
 @checklist_bp.route('/<int:checklist_id>/add_item', methods=['GET', 'POST'])
 @login_required
