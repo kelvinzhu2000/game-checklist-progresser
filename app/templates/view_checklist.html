@@ -59,6 +59,11 @@
                             <p>{{ item.description }}</p>
                         {% endif %}
                     </div>
+                    {% if current_user.is_authenticated and checklist.creator_id == current_user.id %}
+                        <form method="POST" action="{{ url_for('checklist.delete_item', checklist_id=checklist.id, item_id=item.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this item?');">
+                            <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                        </form>
+                    {% endif %}
                 </div>
             </li>
             {% endfor %}

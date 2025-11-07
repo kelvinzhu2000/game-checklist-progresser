@@ -113,7 +113,7 @@ class UserProgress(db.Model):
     completed_at = db.Column(db.DateTime)
     
     # Relationship to the item
-    item = db.relationship('ChecklistItem', backref='progress_records')
+    item = db.relationship('ChecklistItem', backref=db.backref('progress_records', cascade='all, delete-orphan'))
     
     def __repr__(self):
         return f'<UserProgress item_id={self.item_id} completed={self.completed}>'

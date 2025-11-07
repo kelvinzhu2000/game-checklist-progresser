@@ -363,6 +363,32 @@ def add_item(checklist_id):
     
     return render_template('add_item.html', form=form, checklist=checklist)
 
+@checklist_bp.route('/<int:checklist_id>/item/<int:item_id>/delete', methods=['POST'])
+@login_required
+def delete_item(checklist_id, item_id):
+    """Delete a checklist item."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    # Only the creator can delete items from their checklist
+    if checklist.creator_id != current_user.id:
+        abort(403)
+    
+    item = ChecklistItem.query.get_or_404(item_id)
+    
+    # Verify the item belongs to this checklist
+    if item.checklist_id != checklist_id:
+        abort(404)
+    
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        flash('Item deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('An error occurred while deleting the item.', 'error')
+    
+    return redirect(url_for('checklist.view', checklist_id=checklist_id))
+
 @checklist_bp.route('/<int:checklist_id>/copy', methods=['POST'])
 @login_required
 def copy(checklist_id):
