@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, session, jsonify
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
@@ -334,7 +334,68 @@ def edit(checklist_id):
         form.description.data = checklist.description
         form.is_public.data = checklist.is_public
     
-    return render_template('edit_checklist.html', form=form, checklist=checklist)
+    # Get all items for this checklist
+    items = checklist.items.order_by(ChecklistItem.order).all()
+    
+    return render_template('edit_checklist.html', form=form, checklist=checklist, items=items)
+
+@checklist_bp.route('/<int:checklist_id>/batch-update', methods=['POST'])
+@login_required
+def batch_update(checklist_id):
+    """Batch update checklist metadata and items."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    # Only the creator can edit their checklist
+    if checklist.creator_id != current_user.id:
+        abort(403)
+    
+    data = request.get_json()
+    
+    try:
+        # Update basic checklist information
+        checklist.title = data.get('title', checklist.title)
+        checklist.description = data.get('description', checklist.description)
+        checklist.is_public = data.get('is_public', checklist.is_public)
+        
+        # Handle items
+        items_data = data.get('items', [])
+        existing_item_ids = set()
+        
+        # Update or create items
+        for idx, item_data in enumerate(items_data):
+            item_id = item_data.get('id')
+            
+            if item_id and item_id != 'new':
+                # Update existing item
+                item = ChecklistItem.query.get(item_id)
+                if item and item.checklist_id == checklist_id:
+                    item.title = item_data.get('title', item.title)
+                    item.description = item_data.get('description', item.description)
+                    item.order = idx + 1
+                    existing_item_ids.add(item_id)
+            else:
+                # Create new item
+                new_item = ChecklistItem(
+                    checklist_id=checklist_id,
+                    title=item_data.get('title', ''),
+                    description=item_data.get('description', ''),
+                    order=idx + 1
+                )
+                db.session.add(new_item)
+        
+        # Delete items that were removed
+        deleted_ids = data.get('deleted_items', [])
+        for item_id in deleted_ids:
+            item = ChecklistItem.query.get(item_id)
+            if item and item.checklist_id == checklist_id:
+                db.session.delete(item)
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Checklist updated successfully!'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @checklist_bp.route('/<int:checklist_id>/add_item', methods=['GET', 'POST'])
 @login_required
