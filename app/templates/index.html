@@ -9,7 +9,7 @@
     {% if not current_user.is_authenticated %}
         <div class="hero-buttons">
             <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Get Started</a>
-            <a href="{{ url_for('main.browse') }}" class="btn btn-secondary">Browse Checklists</a>
+            <a href="{{ url_for('main.games') }}" class="btn btn-secondary">Browse Games</a>
         </div>
     {% endif %}
 </div>
@@ -45,7 +45,7 @@
         </div>
         {% endfor %}
     </div>
-    <a href="{{ url_for('main.browse') }}" class="btn">View All</a>
+    <a href="{{ url_for('main.games') }}" class="btn">View All Games</a>
 </section>
 {% endif %}
 {% endblock %}

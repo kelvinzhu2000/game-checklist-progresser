@@ -139,13 +139,13 @@ def test_browse_checklists(client, app):
         db.session.add(checklist)
         db.session.commit()
         
-        # Test browse games page
-        response = client.get('/browse')
+        # Test games page (old browse redirects to games)
+        response = client.get('/browse', follow_redirects=True)
         assert response.status_code == 200
         assert b'Test Game' in response.data
         
-        # Test browse specific game page
-        response = client.get(f'/browse/{game_id}')
+        # Test game detail page (old browse/<id> redirects to games/<id>)
+        response = client.get(f'/browse/{game_id}', follow_redirects=True)
         assert response.status_code == 200
         assert b'Public Checklist' in response.data
 

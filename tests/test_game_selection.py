@@ -40,14 +40,14 @@ def authenticated_user(client, app):
     })
     return client
 
-def test_my_games_page(authenticated_user, app):
-    """Test that my games page loads."""
-    response = authenticated_user.get('/my-games')
+def test_games_page(authenticated_user, app):
+    """Test that games page loads."""
+    response = authenticated_user.get('/games')
     assert response.status_code == 200
-    assert b'My Games' in response.data
+    assert b'Games' in response.data
 
-def test_my_games_shows_user_games(authenticated_user, app):
-    """Test that my games page shows games from user's checklists."""
+def test_games_shows_all_games(authenticated_user, app):
+    """Test that games page shows all games."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
@@ -73,13 +73,13 @@ def test_my_games_shows_user_games(authenticated_user, app):
         db.session.add_all([checklist1, checklist2])
         db.session.commit()
     
-    response = authenticated_user.get('/my-games')
+    response = authenticated_user.get('/games')
     assert response.status_code == 200
     assert b'The Legend of Zelda' in response.data
     assert b'Super Mario Bros' in response.data
 
-def test_select_game(authenticated_user, app):
-    """Test selecting a game."""
+def test_game_detail(authenticated_user, app):
+    """Test viewing game detail page."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
@@ -97,18 +97,24 @@ def test_select_game(authenticated_user, app):
         db.session.add(checklist)
         db.session.commit()
     
-    response = authenticated_user.get(f'/select-game/{game_id}', follow_redirects=True)
+    response = authenticated_user.get(f'/games/{game_id}')
     assert response.status_code == 200
     assert b'Test Game' in response.data
 
-def test_my_checklists_redirects_without_game(authenticated_user, app):
-    """Test that my checklists redirects to my games when no game is selected."""
+def test_legacy_my_games_redirects(authenticated_user, app):
+    """Test that legacy my-games route redirects to games page."""
+    response = authenticated_user.get('/my-games')
+    assert response.status_code == 302
+    assert '/games' in response.location
+
+def test_legacy_my_checklists_redirects(authenticated_user, app):
+    """Test that legacy my-checklists route redirects to games page."""
     response = authenticated_user.get('/my-checklists')
     assert response.status_code == 302
-    assert '/my-games' in response.location
+    assert '/games' in response.location
 
-def test_my_checklists_with_selected_game(authenticated_user, app):
-    """Test that my checklists shows only checklists for selected game."""
+def test_game_detail_with_user_checklists(authenticated_user, app):
+    """Test that game detail page shows checklists for specific game."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
@@ -135,44 +141,20 @@ def test_my_checklists_with_selected_game(authenticated_user, app):
         db.session.commit()
         game1_id = game1.id
     
-    # Select Zelda game
-    authenticated_user.get(f'/select-game/{game1_id}')
-    
-    # Check my checklists page
-    response = authenticated_user.get('/my-checklists')
+    # Check game detail page shows only Zelda checklists
+    response = authenticated_user.get(f'/games/{game1_id}')
     assert response.status_code == 200
     assert b'Zelda Quest' in response.data
     assert b'Mario Quest' not in response.data
 
-def test_clear_game_selection(authenticated_user, app):
-    """Test clearing the game selection."""
-    with app.app_context():
-        user = User.query.filter_by(username='testuser').first()
-        
-        game = Game(name='Test Game')
-        db.session.add(game)
-        db.session.commit()
-        game_id = game.id
-        
-        checklist = Checklist(
-            title='Test Checklist',
-            game_id=game_id,
-            creator_id=user.id,
-            is_public=True
-        )
-        db.session.add(checklist)
-        db.session.commit()
-    
-    # Select a game
-    authenticated_user.get(f'/select-game/{game_id}')
-    
-    # Clear selection
-    response = authenticated_user.get('/clear-game', follow_redirects=True)
-    assert response.status_code == 200
-    assert b'Game selection cleared' in response.data
+def test_legacy_clear_game_redirects(authenticated_user, app):
+    """Test that legacy clear-game route redirects to games page."""
+    response = authenticated_user.get('/clear-game')
+    assert response.status_code == 302
+    assert '/games' in response.location
 
-def test_create_checklist_with_selected_game(authenticated_user, app):
-    """Test that create checklist pre-fills the game name when a game is selected."""
+def test_create_checklist_with_game_id(authenticated_user, app):
+    """Test that create checklist pre-fills the game name when game_id is provided."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
@@ -190,16 +172,15 @@ def test_create_checklist_with_selected_game(authenticated_user, app):
         db.session.add(checklist)
         db.session.commit()
     
-    # Select a game
-    authenticated_user.get(f'/select-game/{game_id}')
+    # Visit create page with game_id
     
-    # Visit create page
-    response = authenticated_user.get('/checklist/create')
+    # Visit create page with game_id
+    response = authenticated_user.get(f'/checklist/create/{game_id}')
     assert response.status_code == 200
     assert b'Selected Game' in response.data
 
-def test_copy_checklist_sets_game_context(authenticated_user, app):
-    """Test that copying a checklist sets the game context."""
+def test_copy_checklist_redirects_to_game_detail(authenticated_user, app):
+    """Test that copying a checklist redirects to game detail page."""
     with app.app_context():
         # Create a different user who created the checklist
         creator = User(username='creator', email='creator@example.com')
@@ -220,14 +201,15 @@ def test_copy_checklist_sets_game_context(authenticated_user, app):
         db.session.add(checklist)
         db.session.commit()
         checklist_id = checklist.id
+        game_id = game.id
     
     # Copy the checklist
     response = authenticated_user.post(f'/checklist/{checklist_id}/copy', follow_redirects=True)
     assert response.status_code == 200
     assert b'Adventure Game' in response.data
 
-def test_game_stats_in_my_games(authenticated_user, app):
-    """Test that my games page shows correct statistics."""
+def test_game_stats_in_games_page(authenticated_user, app):
+    """Test that games page shows correct statistics."""
     with app.app_context():
         user = User.query.filter_by(username='testuser').first()
         
@@ -252,6 +234,6 @@ def test_game_stats_in_my_games(authenticated_user, app):
         db.session.add_all([checklist1, checklist2])
         db.session.commit()
     
-    response = authenticated_user.get('/my-games')
+    response = authenticated_user.get('/games')
     assert response.status_code == 200
-    assert b'Created: 2' in response.data
+    assert b'Created by you: 2' in response.data

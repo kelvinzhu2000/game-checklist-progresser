@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Games - Game Checklist Progresser{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Games</h1>
+    <p>Browse games, search for specific titles, or add a new game to get started.</p>
+    {% if current_user.is_authenticated %}
+        <a href="{{ url_for('main.add_game') }}" class="btn btn-success">+ New Game</a>
+    {% endif %}
+</div>
+
+<div class="search-section">
+    <form method="GET" action="{{ url_for('main.games') }}" class="search-form">
+        <input type="text" name="search" placeholder="Search games..." value="{{ search_query or '' }}" class="search-input">
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if search_query %}
+            <a href="{{ url_for('main.games') }}" class="btn btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if games %}
+<div class="games-grid">
+    {% for game in games %}
+    <div class="game-card">
+        <h3>{{ game.name }}</h3>
+        <div class="game-stats">
+            {% if current_user.is_authenticated %}
+                <p class="stats">
+                    Public: {{ game_stats[game.id].public }}<br>
+                    {% if game_stats[game.id].created > 0 %}
+                        Created by you: {{ game_stats[game.id].created }}<br>
+                    {% endif %}
+                    {% if game_stats[game.id].copied > 0 %}
+                        Tracking: {{ game_stats[game.id].copied }}<br>
+                    {% endif %}
+                </p>
+            {% else %}
+                <p class="stats">{{ game_stats[game.id].public }} public checklist{{ 's' if game_stats[game.id].public != 1 else '' }}</p>
+            {% endif %}
+        </div>
+        <div class="game-actions">
+            <a href="{{ url_for('main.game_detail', game_id=game.id) }}" class="btn btn-primary">View Game</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+    {% if search_query %}
+        <p>No games found matching "{{ search_query }}". {% if current_user.is_authenticated %}<a href="{{ url_for('checklist.create') }}">Create a checklist</a> to add this game!{% endif %}</p>
+    {% else %}
+        <p>No games available yet. {% if current_user.is_authenticated %}<a href="{{ url_for('checklist.create') }}">Create the first checklist!</a>{% else %}<a href="{{ url_for('auth.register') }}">Register</a> to create checklists!{% endif %}</p>
+    {% endif %}
+{% endif %}
+{% endblock %}

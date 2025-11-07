@@ -39,3 +39,12 @@ class ChecklistItemForm(FlaskForm):
     title = StringField('Item Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
     submit = SubmitField('Add Item')
+
+class GameForm(FlaskForm):
+    name = StringField('Game Name', validators=[DataRequired(), Length(max=200)])
+    submit = SubmitField('Add Game')
+    
+    def validate_name(self, name):
+        game = Game.query.filter_by(name=name.data).first()
+        if game:
+            raise ValidationError('This game already exists.')
