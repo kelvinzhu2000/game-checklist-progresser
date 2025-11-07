@@ -14,6 +14,7 @@
         
         {% if current_user.is_authenticated %}
             {% if checklist.creator_id == current_user.id %}
+                <a href="{{ url_for('checklist.edit', checklist_id=checklist.id) }}" class="btn btn-primary">Edit Checklist</a>
                 <a href="{{ url_for('checklist.add_item', checklist_id=checklist.id) }}" class="btn btn-primary">Add Item</a>
                 <form method="POST" action="{{ url_for('checklist.delete', checklist_id=checklist.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this checklist? This will remove it for everyone who copied it.');">
                     <button type="submit" class="btn btn-danger">Delete Checklist</button>
