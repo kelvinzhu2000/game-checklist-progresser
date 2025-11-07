@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
 from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress
-from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm
+from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm, GameForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
 from sqlalchemy import func
@@ -78,6 +78,20 @@ def games():
             game_stats[game.id] = {'public': public_count}
     
     return render_template('games.html', games=games_list, game_stats=game_stats, search_query=search_query)
+
+@main_bp.route('/games/new', methods=['GET', 'POST'])
+@login_required
+def add_game():
+    """Add a new game to the system."""
+    form = GameForm()
+    if form.validate_on_submit():
+        game = Game(name=form.name.data)
+        db.session.add(game)
+        db.session.commit()
+        flash(f'Game "{game.name}" added successfully!', 'success')
+        return redirect(url_for('main.game_detail', game_id=game.id))
+    
+    return render_template('add_game.html', form=form)
 
 @main_bp.route('/games/<int:game_id>')
 def game_detail(game_id):
