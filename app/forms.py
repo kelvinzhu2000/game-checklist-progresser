@@ -44,7 +44,7 @@ class ChecklistEditForm(FlaskForm):
     title = StringField('Checklist Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
     ai_prompt = TextAreaField('AI Generation Prompt (Optional)', 
-                              description='Describe what items you want to add or modify in this checklist, and AI will help you.')
+                              description='Describe what new items you want to add to this checklist, and AI will generate them for you.')
     is_public = BooleanField('Make Public', default=True)
     submit = SubmitField('Update Checklist')
 

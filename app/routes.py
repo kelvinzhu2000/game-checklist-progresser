@@ -304,7 +304,7 @@ def edit(checklist_id):
             
             if generated_items:
                 # Get the max order to append new items
-                max_order = db.session.query(db.func.max(ChecklistItem.order)).filter_by(
+                max_order = db.session.query(func.max(ChecklistItem.order)).filter_by(
                     checklist_id=checklist_id
                 ).scalar() or 0
                 
@@ -318,14 +318,13 @@ def edit(checklist_id):
                     )
                     db.session.add(item)
                 
-                db.session.commit()
                 flash(f'Checklist updated with {len(generated_items)} AI-generated items!', 'success')
             else:
-                db.session.commit()
                 flash('Checklist updated, but AI generation failed.', 'warning')
         else:
-            db.session.commit()
             flash('Checklist updated successfully!', 'success')
+        
+        db.session.commit()
         
         return redirect(url_for('checklist.view', checklist_id=checklist.id))
     

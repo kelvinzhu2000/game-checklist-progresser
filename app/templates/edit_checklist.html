@@ -35,7 +35,7 @@
         
         <div class="form-group">
             {{ form.ai_prompt.label }}
-            <small class="form-text">Use AI to add more items to this checklist. Describe what you want to add (e.g., "add all collectibles", "include secret achievements").</small>
+            <small class="form-text">Use AI to add more items to this checklist. Describe what new items you want to add (e.g., "add all collectibles", "include secret achievements").</small>
             {{ form.ai_prompt(class="form-control", rows="4", placeholder="Example: Add all collectible items and hidden achievements") }}
             {% if form.ai_prompt.errors %}
                 <ul class="errors">
