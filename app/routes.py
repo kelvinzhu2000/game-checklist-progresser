@@ -395,7 +395,10 @@ def batch_update(checklist_id):
         return jsonify({'success': True, 'message': 'Checklist updated successfully!'})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 400
+        # Log the actual error for debugging
+        import logging
+        logging.error(f"Error updating checklist {checklist_id}: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to update checklist. Please try again.'}), 400
 
 @checklist_bp.route('/<int:checklist_id>/add_item', methods=['GET', 'POST'])
 @login_required

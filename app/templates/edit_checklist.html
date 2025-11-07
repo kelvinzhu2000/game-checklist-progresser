@@ -155,7 +155,7 @@ function saveChanges() {
     };
     
     // Disable the save button to prevent double-clicks
-    const saveButton = event.target;
+    const saveButton = document.querySelector('.btn-primary');
     saveButton.disabled = true;
     saveButton.textContent = 'Saving...';
     
@@ -178,7 +178,7 @@ function saveChanges() {
         }
     })
     .catch(error => {
-        alert('Error saving changes: ' + error);
+        alert('Error saving changes. Please try again.');
         saveButton.disabled = false;
         saveButton.textContent = 'Save Changes';
     });
@@ -192,13 +192,13 @@ document.addEventListener('DOMContentLoaded', function() {
     itemsList.addEventListener('dragstart', function(e) {
         if (e.target.classList.contains('editable-item')) {
             draggedItem = e.target;
-            e.target.style.opacity = '0.5';
+            e.target.classList.add('dragging');
         }
     });
     
     itemsList.addEventListener('dragend', function(e) {
         if (e.target.classList.contains('editable-item')) {
-            e.target.style.opacity = '1';
+            e.target.classList.remove('dragging');
         }
     });
     
@@ -286,6 +286,10 @@ function getDragAfterElement(container, y) {
 .editable-item:hover {
     border-color: #3498db;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.editable-item.dragging {
+    opacity: 0.5;
 }
 
 .item-handle {
