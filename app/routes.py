@@ -7,6 +7,7 @@ from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemF
 from app.ai_service import generate_checklist_items
 from datetime import datetime
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -383,8 +384,10 @@ def delete_item(checklist_id, item_id):
         db.session.delete(item)
         db.session.commit()
         flash('Item deleted successfully!', 'success')
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
+        # Log the error for debugging (in production, this should use proper logging)
+        print(f"Error deleting item {item_id}: {str(e)}")
         flash('An error occurred while deleting the item.', 'error')
     
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
@@ -457,8 +460,9 @@ def delete(checklist_id):
         db.session.delete(checklist)
         db.session.commit()
         flash('Checklist deleted successfully!', 'success')
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
+        print(f"Error deleting checklist {checklist_id}: {str(e)}")
         flash('An error occurred while deleting the checklist.', 'error')
     
     # Redirect back to the game detail page
@@ -480,8 +484,9 @@ def delete_copy(checklist_id):
         db.session.delete(user_checklist)
         db.session.commit()
         flash('Checklist copy removed from your account!', 'success')
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
+        print(f"Error deleting user checklist {user_checklist.id}: {str(e)}")
         flash('An error occurred while removing the checklist copy.', 'error')
     
     # Redirect back to the game detail page
