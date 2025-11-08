@@ -11,6 +11,10 @@ A Python-based web application for creating, sharing, and tracking game checklis
 - **Track Progress**: Monitor your completion percentage for each checklist
 - **Browse & Search**: Find checklists by game name
 - **Personal Dashboard**: View all your created checklists and progress tracking
+- **Category & Reward System**: Organize items by category and track rewards
+  - Assign multiple rewards to checklist items
+  - Filter items by category or reward type
+  - Visual badges for easy identification
 
 ## Technology Stack
 
@@ -52,15 +56,27 @@ export SECRET_KEY='your-secret-key-here'
 export DATABASE_URL='sqlite:///game_checklist.db'
 ```
 
-5. Run the application:
+5. **For existing databases** (upgrading from an older version):
+```bash
+# Run migrations to update your database schema
+python add_reward_tables_migration.py
+```
+   This will:
+   - Add the reward system tables
+   - Clean up any legacy schema issues
+   - Preserve all your existing data
+
+6. Run the application:
 ```bash
 python run.py
 ```
 
-6. Open your browser and navigate to:
+7. Open your browser and navigate to:
 ```
 http://localhost:5000
 ```
+
+> **Note**: If you encounter errors about `game_name` or database schema, see the [MIGRATION.md](MIGRATION.md) guide for detailed migration instructions.
 
 ## Usage
 

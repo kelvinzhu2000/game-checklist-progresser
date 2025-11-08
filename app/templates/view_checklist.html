@@ -49,11 +49,22 @@
         <div id="category-filters" class="category-filters"></div>
     </div>
     
+    <!-- Reward Filter Legend -->
+    <div id="reward-legend" class="reward-legend" style="display: none;">
+        <h3>Filter by Reward</h3>
+        <div id="reward-control-buttons" class="control-buttons"></div>
+        <div id="reward-filters" class="reward-filters"></div>
+    </div>
+    
     <div class="checklist-items">
         <h2>Checklist Items</h2>
         <ul class="items-list">
             {% for item in items %}
-            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" data-category="{{ item.category or '' }}">
+            {% set reward_names = [] %}
+            {% for item_reward in item.rewards %}
+                {% set _ = reward_names.append(item_reward.reward.name) %}
+            {% endfor %}
+            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" data-category="{{ item.category or '' }}" data-rewards="{{ ','.join(reward_names) }}">
                 <div class="item-content">
                     {% if user_copy %}
                         <form method="POST" action="{{ url_for('checklist.toggle_progress', checklist_id=checklist.id, item_id=item.id) }}" class="checkbox-form">
@@ -63,6 +74,13 @@
                     <div class="item-details">
                         {% if item.category %}
                             <span class="item-category-badge">{{ item.category }}</span>
+                        {% endif %}
+                        {% if item.rewards|length > 0 %}
+                            <div class="item-rewards-display">
+                                {% for item_reward in item.rewards %}
+                                    <span class="item-reward-badge">🏆 {{ item_reward.amount }}x {{ item_reward.reward.name }}</span>
+                                {% endfor %}
+                            </div>
                         {% endif %}
                         <h3>{{ item.title }}</h3>
                         {% if item.description %}
@@ -144,40 +162,160 @@ document.addEventListener('DOMContentLoaded', function() {
             categoryFilters.appendChild(otherBtn);
         }
     }
+    
+    // Get all unique rewards from items
+    const rewards = new Set();
+    let hasItemsWithoutRewards = false;
+    
+    items.forEach(item => {
+        const rewardsAttr = item.getAttribute('data-rewards');
+        if (rewardsAttr && rewardsAttr.trim() !== '') {
+            const itemRewards = rewardsAttr.split(',').map(r => r.trim()).filter(r => r);
+            itemRewards.forEach(reward => rewards.add(reward));
+        } else {
+            hasItemsWithoutRewards = true;
+        }
+    });
+    
+    // Only show reward legend if there are rewards
+    if (rewards.size > 0 || hasItemsWithoutRewards) {
+        const rewardLegend = document.getElementById('reward-legend');
+        const rewardControlButtons = document.getElementById('reward-control-buttons');
+        const rewardFilters = document.getElementById('reward-filters');
+        rewardLegend.style.display = 'block';
+        
+        // Add "Select All" and "Deselect All" buttons
+        const selectAllRewardsBtn = document.createElement('button');
+        selectAllRewardsBtn.className = 'reward-filter-btn control-btn';
+        selectAllRewardsBtn.textContent = 'Select All';
+        selectAllRewardsBtn.onclick = function() {
+            selectAllRewards();
+        };
+        rewardControlButtons.appendChild(selectAllRewardsBtn);
+        
+        const deselectAllRewardsBtn = document.createElement('button');
+        deselectAllRewardsBtn.className = 'reward-filter-btn control-btn';
+        deselectAllRewardsBtn.textContent = 'Deselect All';
+        deselectAllRewardsBtn.onclick = function() {
+            deselectAllRewards();
+        };
+        rewardControlButtons.appendChild(deselectAllRewardsBtn);
+        
+        // Create filter buttons for each reward
+        const sortedRewards = Array.from(rewards).sort();
+        sortedRewards.forEach(reward => {
+            const filterBtn = document.createElement('button');
+            filterBtn.className = 'reward-filter-btn active';
+            filterBtn.textContent = '🏆 ' + reward;
+            filterBtn.setAttribute('data-reward', reward);
+            filterBtn.onclick = function() {
+                toggleRewardFilter(this);
+            };
+            rewardFilters.appendChild(filterBtn);
+        });
+        
+        // Add "Other" button for items without rewards
+        if (hasItemsWithoutRewards) {
+            const otherBtn = document.createElement('button');
+            otherBtn.className = 'reward-filter-btn active';
+            otherBtn.textContent = 'No Rewards';
+            otherBtn.setAttribute('data-reward', '');
+            otherBtn.onclick = function() {
+                toggleRewardFilter(this);
+            };
+            rewardFilters.appendChild(otherBtn);
+        }
+    }
 });
 
 function toggleCategoryFilter(btn) {
     const category = btn.getAttribute('data-category');
     btn.classList.toggle('active');
-    
-    // Filter items
-    const items = document.querySelectorAll('.item');
-    items.forEach(item => {
-        const itemCategory = item.getAttribute('data-category');
-        if (itemCategory === category) {
-            if (btn.classList.contains('active')) {
-                item.style.display = '';
-            } else {
-                item.style.display = 'none';
-            }
-        }
-    });
+    applyFilters();
 }
 
 function selectAllCategories() {
     const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.control-btn)');
-    const items = document.querySelectorAll('.item');
-    
     categoryBtns.forEach(btn => btn.classList.add('active'));
-    items.forEach(item => item.style.display = '');
+    applyFilters();
 }
 
 function deselectAllCategories() {
     const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.control-btn)');
-    const items = document.querySelectorAll('.item');
-    
     categoryBtns.forEach(btn => btn.classList.remove('active'));
-    items.forEach(item => item.style.display = 'none');
+    applyFilters();
+}
+
+function toggleRewardFilter(btn) {
+    const reward = btn.getAttribute('data-reward');
+    btn.classList.toggle('active');
+    applyFilters();
+}
+
+function selectAllRewards() {
+    const rewardBtns = document.querySelectorAll('.reward-filter-btn:not(.control-btn)');
+    rewardBtns.forEach(btn => btn.classList.add('active'));
+    applyFilters();
+}
+
+function deselectAllRewards() {
+    const rewardBtns = document.querySelectorAll('.reward-filter-btn:not(.control-btn)');
+    rewardBtns.forEach(btn => btn.classList.remove('active'));
+    applyFilters();
+}
+
+function applyFilters() {
+    const items = document.querySelectorAll('.item');
+    const activeCategoryBtns = document.querySelectorAll('.category-filter-btn.active:not(.control-btn)');
+    const activeRewardBtns = document.querySelectorAll('.reward-filter-btn.active:not(.control-btn)');
+    
+    // Get active categories
+    const activeCategories = new Set();
+    activeCategoryBtns.forEach(btn => {
+        activeCategories.add(btn.getAttribute('data-category'));
+    });
+    
+    // Get active rewards
+    const activeRewards = new Set();
+    activeRewardBtns.forEach(btn => {
+        activeRewards.add(btn.getAttribute('data-reward'));
+    });
+    
+    // If no filters are active, hide all items
+    const hasActiveCategoryFilters = activeCategoryBtns.length > 0;
+    const hasActiveRewardFilters = activeRewardBtns.length > 0;
+    
+    items.forEach(item => {
+        const itemCategory = item.getAttribute('data-category');
+        const itemRewardsAttr = item.getAttribute('data-rewards');
+        const itemRewards = itemRewardsAttr ? itemRewardsAttr.split(',').map(r => r.trim()).filter(r => r) : [];
+        
+        let showByCategory = true;
+        let showByReward = true;
+        
+        // Check category filter
+        if (hasActiveCategoryFilters) {
+            showByCategory = activeCategories.has(itemCategory);
+        }
+        
+        // Check reward filter
+        if (hasActiveRewardFilters) {
+            if (itemRewards.length === 0) {
+                // Item has no rewards, check if "No Rewards" filter is active
+                showByReward = activeRewards.has('');
+            } else {
+                // Item has rewards, check if any match active filters
+                showByReward = itemRewards.some(reward => activeRewards.has(reward));
+            }
+        }
+        
+        // Show item only if it passes both filters
+        if (showByCategory && showByReward) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
 }
 </script>
 
@@ -251,6 +389,75 @@ function deselectAllCategories() {
     font-size: 0.85rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
+}
+
+.item-rewards-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.item-reward-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #fff3cd;
+    color: #856404;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid #ffc107;
+}
+
+.reward-legend {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: #fffbf0;
+    border-radius: 8px;
+    border: 1px solid #ffe4a3;
+}
+
+.reward-legend h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.reward-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.reward-filter-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #ffc107;
+    background: white;
+    color: #856404;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.reward-filter-btn:hover {
+    background: #fff3cd;
+}
+
+.reward-filter-btn.active {
+    background: #ffc107;
+    color: #212529;
+}
+
+.reward-filter-btn.control-btn {
+    border-color: #2c3e50;
+    color: #2c3e50;
+    background: #ecf0f1;
+}
+
+.reward-filter-btn.control-btn:hover {
+    background: #bdc3c7;
 }
 
 .item {

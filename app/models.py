@@ -79,6 +79,9 @@ class ChecklistItem(db.Model):
     order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Relationships
+    rewards = db.relationship('ItemReward', cascade='all, delete-orphan')
+    
     def __repr__(self):
         return f'<ChecklistItem {self.title}>'
 
@@ -118,3 +121,27 @@ class UserProgress(db.Model):
     
     def __repr__(self):
         return f'<UserProgress item_id={self.item_id} completed={self.completed}>'
+
+class Reward(db.Model):
+    __tablename__ = 'rewards'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Reward {self.name}>'
+
+class ItemReward(db.Model):
+    """Association object for ChecklistItem and Reward with amount."""
+    __tablename__ = 'checklist_item_rewards'
+    
+    checklist_item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), primary_key=True)
+    reward_id = db.Column(db.Integer, db.ForeignKey('rewards.id'), primary_key=True)
+    amount = db.Column(db.Integer, default=1, nullable=False)
+    
+    # Relationships
+    reward = db.relationship('Reward')
+    
+    def __repr__(self):
+        return f'<ItemReward item_id={self.checklist_item_id} reward_id={self.reward_id} amount={self.amount}>'
