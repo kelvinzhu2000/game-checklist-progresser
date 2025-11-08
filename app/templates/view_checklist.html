@@ -45,7 +45,8 @@
     <!-- Category Filter Legend -->
     <div id="category-legend" class="category-legend" style="display: none;">
         <h3>Filter by Category</h3>
-        <div id="category-filters"></div>
+        <div id="control-buttons" class="control-buttons"></div>
+        <div id="category-filters" class="category-filters"></div>
     </div>
     
     <div class="checklist-items">
@@ -97,17 +98,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Only show category legend if there are categories or uncategorized items
     if (categories.size > 0 || hasUncategorized) {
         const categoryLegend = document.getElementById('category-legend');
+        const controlButtons = document.getElementById('control-buttons');
         const categoryFilters = document.getElementById('category-filters');
         categoryLegend.style.display = 'block';
         
-        // Add "Select All" and "Deselect All" buttons
+        // Add "Select All" and "Deselect All" buttons to control buttons row
         const selectAllBtn = document.createElement('button');
         selectAllBtn.className = 'category-filter-btn control-btn';
         selectAllBtn.textContent = 'Select All';
         selectAllBtn.onclick = function() {
             selectAllCategories();
         };
-        categoryFilters.appendChild(selectAllBtn);
+        controlButtons.appendChild(selectAllBtn);
         
         const deselectAllBtn = document.createElement('button');
         deselectAllBtn.className = 'category-filter-btn control-btn';
@@ -115,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function() {
         deselectAllBtn.onclick = function() {
             deselectAllCategories();
         };
-        categoryFilters.appendChild(deselectAllBtn);
+        controlButtons.appendChild(deselectAllBtn);
         
         // Create filter buttons for each category
         const sortedCategories = Array.from(categories).sort();
