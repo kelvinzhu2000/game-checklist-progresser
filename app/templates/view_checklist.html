@@ -83,19 +83,39 @@ document.addEventListener('DOMContentLoaded', function() {
     // Get all unique categories from items
     const items = document.querySelectorAll('.item');
     const categories = new Set();
+    let hasUncategorized = false;
     
     items.forEach(item => {
         const category = item.getAttribute('data-category');
         if (category && category.trim() !== '') {
             categories.add(category);
+        } else {
+            hasUncategorized = true;
         }
     });
     
-    // Only show category legend if there are categories
-    if (categories.size > 0) {
+    // Only show category legend if there are categories or uncategorized items
+    if (categories.size > 0 || hasUncategorized) {
         const categoryLegend = document.getElementById('category-legend');
         const categoryFilters = document.getElementById('category-filters');
         categoryLegend.style.display = 'block';
+        
+        // Add "Select All" and "Deselect All" buttons
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.className = 'category-filter-btn control-btn';
+        selectAllBtn.textContent = 'Select All';
+        selectAllBtn.onclick = function() {
+            selectAllCategories();
+        };
+        categoryFilters.appendChild(selectAllBtn);
+        
+        const deselectAllBtn = document.createElement('button');
+        deselectAllBtn.className = 'category-filter-btn control-btn';
+        deselectAllBtn.textContent = 'Deselect All';
+        deselectAllBtn.onclick = function() {
+            deselectAllCategories();
+        };
+        categoryFilters.appendChild(deselectAllBtn);
         
         // Create filter buttons for each category
         const sortedCategories = Array.from(categories).sort();
@@ -110,14 +130,17 @@ document.addEventListener('DOMContentLoaded', function() {
             categoryFilters.appendChild(filterBtn);
         });
         
-        // Add "All" button
-        const allBtn = document.createElement('button');
-        allBtn.className = 'category-filter-btn all-btn active';
-        allBtn.textContent = 'All';
-        allBtn.onclick = function() {
-            toggleAllCategories();
-        };
-        categoryFilters.insertBefore(allBtn, categoryFilters.firstChild);
+        // Add "Other" button for uncategorized items
+        if (hasUncategorized) {
+            const otherBtn = document.createElement('button');
+            otherBtn.className = 'category-filter-btn active';
+            otherBtn.textContent = 'Other';
+            otherBtn.setAttribute('data-category', '');
+            otherBtn.onclick = function() {
+                toggleCategoryFilter(this);
+            };
+            categoryFilters.appendChild(otherBtn);
+        }
     }
 });
 
@@ -137,41 +160,22 @@ function toggleCategoryFilter(btn) {
             }
         }
     });
-    
-    // Update "All" button state
-    updateAllButtonState();
 }
 
-function toggleAllCategories() {
-    const allBtn = document.querySelector('.category-filter-btn.all-btn');
-    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.all-btn)');
+function selectAllCategories() {
+    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.control-btn)');
     const items = document.querySelectorAll('.item');
     
-    const shouldActivateAll = !allBtn.classList.contains('active');
-    
-    if (shouldActivateAll) {
-        // Activate all categories
-        allBtn.classList.add('active');
-        categoryBtns.forEach(btn => btn.classList.add('active'));
-        items.forEach(item => item.style.display = '');
-    } else {
-        // Deactivate all categories
-        allBtn.classList.remove('active');
-        categoryBtns.forEach(btn => btn.classList.remove('active'));
-        items.forEach(item => item.style.display = 'none');
-    }
+    categoryBtns.forEach(btn => btn.classList.add('active'));
+    items.forEach(item => item.style.display = '');
 }
 
-function updateAllButtonState() {
-    const allBtn = document.querySelector('.category-filter-btn.all-btn');
-    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.all-btn)');
-    const allActive = Array.from(categoryBtns).every(btn => btn.classList.contains('active'));
+function deselectAllCategories() {
+    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.control-btn)');
+    const items = document.querySelectorAll('.item');
     
-    if (allActive) {
-        allBtn.classList.add('active');
-    } else {
-        allBtn.classList.remove('active');
-    }
+    categoryBtns.forEach(btn => btn.classList.remove('active'));
+    items.forEach(item => item.style.display = 'none');
 }
 </script>
 
@@ -217,14 +221,14 @@ function updateAllButtonState() {
     color: white;
 }
 
-.category-filter-btn.all-btn {
+.category-filter-btn.control-btn {
     border-color: #2c3e50;
     color: #2c3e50;
+    background: #ecf0f1;
 }
 
-.category-filter-btn.all-btn.active {
-    background: #2c3e50;
-    color: white;
+.category-filter-btn.control-btn:hover {
+    background: #bdc3c7;
 }
 
 .item-category-badge {
