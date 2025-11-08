@@ -123,12 +123,20 @@ def migrate_database():
                         CREATE TABLE checklist_item_rewards (
                             checklist_item_id INTEGER NOT NULL,
                             reward_id INTEGER NOT NULL,
+                            amount INTEGER NOT NULL DEFAULT 1,
                             PRIMARY KEY (checklist_item_id, reward_id),
                             FOREIGN KEY (checklist_item_id) REFERENCES checklist_items (id),
                             FOREIGN KEY (reward_id) REFERENCES rewards (id)
                         )
                     '''))
                     print("  ✓ Created 'checklist_item_rewards' association table.")
+                else:
+                    # Check if amount column exists
+                    association_columns = [col['name'] for col in inspector.get_columns('checklist_item_rewards')]
+                    if 'amount' not in association_columns:
+                        print("Adding 'amount' column to 'checklist_item_rewards' table...")
+                        conn.execute(text('ALTER TABLE checklist_item_rewards ADD COLUMN amount INTEGER NOT NULL DEFAULT 1'))
+                        print("  ✓ Added 'amount' column.")
                 
                 conn.commit()
             

@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward, ItemReward
 import json
 
 @pytest.fixture
@@ -95,17 +95,25 @@ def test_checklist_item_rewards_relationship(app):
         db.session.add(reward2)
         db.session.commit()
         
-        # Add rewards to item
-        item.rewards.append(reward1)
-        item.rewards.append(reward2)
+        # Add rewards to item using ItemReward
+        item_reward1 = ItemReward(checklist_item_id=item.id, reward_id=reward1.id, amount=2)
+        item_reward2 = ItemReward(checklist_item_id=item.id, reward_id=reward2.id, amount=1)
+        db.session.add(item_reward1)
+        db.session.add(item_reward2)
         db.session.commit()
         
         # Verify relationships
-        retrieved_item = ChecklistItem.query.get(item.id)
-        assert retrieved_item.rewards.count() == 2
-        reward_names = [r.name for r in retrieved_item.rewards.all()]
+        retrieved_item = db.session.get(ChecklistItem, item.id)
+        assert len(retrieved_item.rewards) == 2
+        reward_names = [r.reward.name for r in retrieved_item.rewards]
         assert 'Gold Coin' in reward_names
         assert 'Experience Points' in reward_names
+        # Verify amounts
+        for item_reward in retrieved_item.rewards:
+            if item_reward.reward.name == 'Gold Coin':
+                assert item_reward.amount == 2
+            elif item_reward.reward.name == 'Experience Points':
+                assert item_reward.amount == 1
 
 def test_batch_update_with_rewards(auth_client, app):
     """Test batch updating items with rewards."""
@@ -140,7 +148,7 @@ def test_batch_update_with_rewards(auth_client, app):
         checklist_id = checklist.id
         item_id = item.id
     
-    # Update item via batch update with rewards
+    # Update item via batch update with rewards (with amounts)
     update_data = {
         'title': 'Updated Checklist',
         'description': 'Updated description',
@@ -151,7 +159,10 @@ def test_batch_update_with_rewards(auth_client, app):
                 'title': 'Updated Item 1',
                 'description': 'Desc 1',
                 'category': 'Category A',
-                'rewards': ['Gold Coin', 'Experience Points']
+                'rewards': [
+                    {'name': 'Gold Coin', 'amount': 3},
+                    {'name': 'Experience Points', 'amount': 5}
+                ]
             }
         ],
         'deleted_items': []
@@ -168,11 +179,17 @@ def test_batch_update_with_rewards(auth_client, app):
     assert data['success'] is True
     
     with app.app_context():
-        item = ChecklistItem.query.get(item_id)
-        assert item.rewards.count() == 2
-        reward_names = [r.name for r in item.rewards.all()]
+        item = db.session.get(ChecklistItem, item_id)
+        assert len(item.rewards) == 2
+        reward_names = [r.reward.name for r in item.rewards]
         assert 'Gold Coin' in reward_names
         assert 'Experience Points' in reward_names
+        # Check amounts
+        for item_reward in item.rewards:
+            if item_reward.reward.name == 'Gold Coin':
+                assert item_reward.amount == 3
+            elif item_reward.reward.name == 'Experience Points':
+                assert item_reward.amount == 5
 
 def test_add_new_item_with_rewards_via_batch_update(auth_client, app):
     """Test adding a new item with rewards via batch update."""
@@ -207,7 +224,7 @@ def test_add_new_item_with_rewards_via_batch_update(auth_client, app):
                 'title': 'New Item',
                 'description': 'New Description',
                 'category': 'New Category',
-                'rewards': ['Diamond', 'Rare Item']
+                'rewards': [{'name': 'Diamond', 'amount': 1}, {'name': 'Rare Item', 'amount': 1}]
             }
         ],
         'deleted_items': []
@@ -226,8 +243,8 @@ def test_add_new_item_with_rewards_via_batch_update(auth_client, app):
     with app.app_context():
         item = ChecklistItem.query.filter_by(title='New Item').first()
         assert item is not None
-        assert item.rewards.count() == 2
-        reward_names = [r.name for r in item.rewards.all()]
+        assert len(item.rewards) == 2
+        reward_names = [r.reward.name for r in item.rewards]
         assert 'Diamond' in reward_names
         assert 'Rare Item' in reward_names
 
@@ -267,16 +284,26 @@ def test_get_rewards_endpoint(auth_client, app):
             title='Item 1',
             order=1
         )
-        item1.rewards.append(reward1)
-        item1.rewards.append(reward2)
+        db.session.add(item1)
+        db.session.flush()
+        
+        item_reward1_1 = ItemReward(checklist_item_id=item1.id, reward_id=reward1.id, amount=1)
+        item_reward1_2 = ItemReward(checklist_item_id=item1.id, reward_id=reward2.id, amount=1)
+        db.session.add(item_reward1_1)
+        db.session.add(item_reward1_2)
         
         item2 = ChecklistItem(
             checklist_id=checklist.id,
             title='Item 2',
             order=2
         )
-        item2.rewards.append(reward2)
-        item2.rewards.append(reward3)
+        db.session.add(item2)
+        db.session.flush()
+        
+        item_reward2_1 = ItemReward(checklist_item_id=item2.id, reward_id=reward2.id, amount=1)
+        item_reward2_2 = ItemReward(checklist_item_id=item2.id, reward_id=reward3.id, amount=1)
+        db.session.add(item_reward2_1)
+        db.session.add(item_reward2_2)
         
         item3 = ChecklistItem(
             checklist_id=checklist.id,
@@ -285,8 +312,6 @@ def test_get_rewards_endpoint(auth_client, app):
         )
         # No rewards
         
-        db.session.add(item1)
-        db.session.add(item2)
         db.session.add(item3)
         db.session.commit()
         
@@ -339,17 +364,23 @@ def test_view_checklist_with_rewards(auth_client, app):
             title='Item 1',
             order=1
         )
-        item1.rewards.append(reward1)
+        db.session.add(item1)
+        db.session.flush()
+        
+        item_reward1 = ItemReward(checklist_item_id=item1.id, reward_id=reward1.id, amount=1)
+        db.session.add(item_reward1)
         
         item2 = ChecklistItem(
             checklist_id=checklist.id,
             title='Item 2',
             order=2
         )
-        item2.rewards.append(reward2)
-        
-        db.session.add(item1)
         db.session.add(item2)
+        db.session.flush()
+        
+        item_reward2 = ItemReward(checklist_item_id=item2.id, reward_id=reward2.id, amount=1)
+        db.session.add(item_reward2)
+        
         db.session.commit()
         checklist_id = checklist.id
     
@@ -357,10 +388,11 @@ def test_view_checklist_with_rewards(auth_client, app):
     response = auth_client.get(f'/checklist/{checklist_id}')
     assert response.status_code == 200
     
-    # Check that reward badges are shown
+    # Check that reward badges are shown (with amounts now)
     assert b'Gold Coin' in response.data
     assert b'Experience' in response.data
     assert b'item-reward-badge' in response.data
+    assert b'1x' in response.data  # Check amount is displayed
 
 def test_item_without_rewards(auth_client, app):
     """Test that items without rewards still work correctly."""
@@ -402,7 +434,7 @@ def test_item_without_rewards(auth_client, app):
     # Verify item has no rewards
     with app.app_context():
         item = ChecklistItem.query.get(item_id)
-        assert item.rewards.count() == 0
+        assert len(item.rewards) == 0
 
 def test_update_rewards_removes_old_rewards(auth_client, app):
     """Test that updating rewards removes old rewards and adds new ones."""
@@ -436,8 +468,11 @@ def test_update_rewards_removes_old_rewards(auth_client, app):
             title='Item 1',
             order=1
         )
-        item.rewards.append(reward1)
         db.session.add(item)
+        db.session.flush()
+        
+        item_reward1 = ItemReward(checklist_item_id=item.id, reward_id=reward1.id, amount=1)
+        db.session.add(item_reward1)
         db.session.commit()
         
         checklist_id = checklist.id
@@ -454,7 +489,7 @@ def test_update_rewards_removes_old_rewards(auth_client, app):
                 'title': 'Item 1',
                 'description': '',
                 'category': '',
-                'rewards': ['New Reward 1', 'New Reward 2']
+                'rewards': [{'name': 'New Reward 1', 'amount': 1}, {'name': 'New Reward 2', 'amount': 1}]
             }
         ],
         'deleted_items': []
@@ -470,8 +505,8 @@ def test_update_rewards_removes_old_rewards(auth_client, app):
     
     with app.app_context():
         item = ChecklistItem.query.get(item_id)
-        assert item.rewards.count() == 2
-        reward_names = [r.name for r in item.rewards.all()]
+        assert len(item.rewards) == 2
+        reward_names = [r.reward.name for r in item.rewards]
         assert 'New Reward 1' in reward_names
         assert 'New Reward 2' in reward_names
         assert 'Old Reward' not in reward_names
@@ -509,14 +544,14 @@ def test_reward_reuse_across_items(auth_client, app):
                 'title': 'Item 1',
                 'description': '',
                 'category': '',
-                'rewards': ['Shared Reward']
+                'rewards': [{'name': 'Shared Reward', 'amount': 1}]
             },
             {
                 'id': 'new',
                 'title': 'Item 2',
                 'description': '',
                 'category': '',
-                'rewards': ['Shared Reward']
+                'rewards': [{'name': 'Shared Reward', 'amount': 1}]
             }
         ],
         'deleted_items': []
@@ -539,5 +574,5 @@ def test_reward_reuse_across_items(auth_client, app):
         items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
         assert len(items) == 2
         for item in items:
-            assert item.rewards.count() == 1
-            assert item.rewards.first().name == 'Shared Reward'
+            assert len(item.rewards) == 1
+            assert item.rewards[0].reward.name == 'Shared Reward'

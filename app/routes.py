@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
-from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward, ItemReward
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm, GameForm, ChecklistEditForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
@@ -375,16 +375,21 @@ def batch_update(checklist_id):
                     item.order = idx + 1
                     
                     # Handle rewards
-                    reward_names = item_data.get('rewards', [])
-                    if reward_names is not None:
-                        # Clear existing rewards by removing all associations
-                        # Get all current rewards and remove them
-                        for reward in item.rewards.all():
-                            item.rewards.remove(reward)
+                    reward_data = item_data.get('rewards', [])
+                    if reward_data is not None:
+                        # Clear existing reward associations
+                        ItemReward.query.filter_by(checklist_item_id=item.id).delete()
                         
-                        # Add new rewards
-                        for reward_name in reward_names:
-                            reward_name = reward_name.strip()
+                        # Add new rewards with amounts
+                        for reward_info in reward_data:
+                            # Handle both old format (string) and new format (object with name and amount)
+                            if isinstance(reward_info, str):
+                                reward_name = reward_info.strip()
+                                reward_amount = 1
+                            else:
+                                reward_name = reward_info.get('name', '').strip()
+                                reward_amount = reward_info.get('amount', 1)
+                            
                             if reward_name:
                                 # Get or create reward
                                 reward = Reward.query.filter_by(name=reward_name).first()
@@ -392,7 +397,14 @@ def batch_update(checklist_id):
                                     reward = Reward(name=reward_name)
                                     db.session.add(reward)
                                     db.session.flush()  # Get the reward ID
-                                item.rewards.append(reward)
+                                
+                                # Create association with amount
+                                item_reward = ItemReward(
+                                    checklist_item_id=item.id,
+                                    reward_id=reward.id,
+                                    amount=reward_amount
+                                )
+                                db.session.add(item_reward)
                     
                     existing_item_ids.add(item_id)
             else:
@@ -408,10 +420,17 @@ def batch_update(checklist_id):
                 db.session.flush()  # Get the new item ID
                 
                 # Handle rewards for new item
-                reward_names = item_data.get('rewards', [])
-                if reward_names:
-                    for reward_name in reward_names:
-                        reward_name = reward_name.strip()
+                reward_data = item_data.get('rewards', [])
+                if reward_data:
+                    for reward_info in reward_data:
+                        # Handle both old format (string) and new format (object with name and amount)
+                        if isinstance(reward_info, str):
+                            reward_name = reward_info.strip()
+                            reward_amount = 1
+                        else:
+                            reward_name = reward_info.get('name', '').strip()
+                            reward_amount = reward_info.get('amount', 1)
+                        
                         if reward_name:
                             # Get or create reward
                             reward = Reward.query.filter_by(name=reward_name).first()
@@ -419,7 +438,14 @@ def batch_update(checklist_id):
                                 reward = Reward(name=reward_name)
                                 db.session.add(reward)
                                 db.session.flush()  # Get the reward ID
-                            new_item.rewards.append(reward)
+                            
+                            # Create association with amount
+                            item_reward = ItemReward(
+                                checklist_item_id=new_item.id,
+                                reward_id=reward.id,
+                                amount=reward_amount
+                            )
+                            db.session.add(item_reward)
         
         # Delete items that were removed
         deleted_ids = data.get('deleted_items', [])
@@ -550,8 +576,8 @@ def get_rewards(checklist_id):
     # Get unique rewards across all items
     rewards_set = set()
     for item in items:
-        for reward in item.rewards.all():
-            rewards_set.add(reward.name)
+        for item_reward in item.rewards:
+            rewards_set.add(item_reward.reward.name)
     
     reward_list = sorted(list(rewards_set))
     return jsonify({'rewards': reward_list})

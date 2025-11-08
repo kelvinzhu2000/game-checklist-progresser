@@ -55,15 +55,16 @@
                         <div class="item-rewards-container">
                             <label class="rewards-label">Rewards:</label>
                             <div class="rewards-tags">
-                                {% for reward in item.rewards.all() %}
-                                <span class="reward-tag">
-                                    {{ reward.name }}
+                                {% for item_reward in item.rewards %}
+                                <span class="reward-tag" data-reward-name="{{ item_reward.reward.name }}" data-reward-amount="{{ item_reward.amount }}">
+                                    {{ item_reward.amount }}x {{ item_reward.reward.name }}
                                     <button type="button" class="remove-reward" onclick="removeRewardTag(this)" title="Remove reward">×</button>
                                 </span>
                                 {% endfor %}
                             </div>
                             <div class="add-reward-input">
-                                <input type="text" class="reward-input" list="rewards-list" placeholder="Add reward..." autocomplete="off">
+                                <input type="text" class="reward-input" list="rewards-list" placeholder="Reward name..." autocomplete="off">
+                                <input type="number" class="reward-amount-input" placeholder="Amount" value="1" min="1">
                                 <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
                             </div>
                         </div>
@@ -119,7 +120,8 @@ function addNewItem() {
                 <label class="rewards-label">Rewards:</label>
                 <div class="rewards-tags"></div>
                 <div class="add-reward-input">
-                    <input type="text" class="reward-input" list="rewards-list" placeholder="Add reward..." autocomplete="off">
+                    <input type="text" class="reward-input" list="rewards-list" placeholder="Reward name..." autocomplete="off">
+                    <input type="number" class="reward-amount-input" placeholder="Amount" value="1" min="1">
                     <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
                 </div>
             </div>
@@ -144,8 +146,10 @@ function removeItem(button) {
 
 function addReward(button) {
     const container = button.closest('.item-rewards-container');
-    const input = container.querySelector('.reward-input');
-    const rewardName = input.value.trim();
+    const nameInput = container.querySelector('.reward-input');
+    const amountInput = container.querySelector('.reward-amount-input');
+    const rewardName = nameInput.value.trim();
+    const rewardAmount = parseInt(amountInput.value) || 1;
     
     if (!rewardName) {
         return;
@@ -154,10 +158,10 @@ function addReward(button) {
     // Check if reward already exists in this item
     const existingTags = container.querySelectorAll('.reward-tag');
     for (let tag of existingTags) {
-        const tagText = tag.textContent.replace('×', '').trim();
-        if (tagText.toLowerCase() === rewardName.toLowerCase()) {
+        const existingName = tag.getAttribute('data-reward-name');
+        if (existingName && existingName.toLowerCase() === rewardName.toLowerCase()) {
             alert('This reward is already added to this item');
-            input.value = '';
+            nameInput.value = '';
             return;
         }
     }
@@ -166,14 +170,17 @@ function addReward(button) {
     const rewardsContainer = container.querySelector('.rewards-tags');
     const rewardTag = document.createElement('span');
     rewardTag.className = 'reward-tag';
+    rewardTag.setAttribute('data-reward-name', rewardName);
+    rewardTag.setAttribute('data-reward-amount', rewardAmount);
     rewardTag.innerHTML = `
-        ${rewardName}
+        ${rewardAmount}x ${rewardName}
         <button type="button" class="remove-reward" onclick="removeRewardTag(this)" title="Remove reward">×</button>
     `;
     rewardsContainer.appendChild(rewardTag);
     
-    // Clear input
-    input.value = '';
+    // Clear inputs
+    nameInput.value = '';
+    amountInput.value = '1';
 }
 
 function removeRewardTag(button) {
@@ -190,13 +197,17 @@ function collectItemsData() {
         const description = itemEl.querySelector('.item-description-input').value.trim();
         const category = itemEl.querySelector('.item-category-input').value.trim();
         
-        // Collect rewards
+        // Collect rewards with amounts
         const rewards = [];
         const rewardTags = itemEl.querySelectorAll('.reward-tag');
         rewardTags.forEach(tag => {
-            const rewardName = tag.textContent.replace('×', '').trim();
+            const rewardName = tag.getAttribute('data-reward-name');
+            const rewardAmount = parseInt(tag.getAttribute('data-reward-amount')) || 1;
             if (rewardName) {
-                rewards.push(rewardName);
+                rewards.push({
+                    name: rewardName,
+                    amount: rewardAmount
+                });
             }
         });
         
@@ -504,10 +515,19 @@ document.addEventListener('DOMContentLoaded', function() {
 .add-reward-input {
     display: flex;
     gap: 0.5rem;
+    align-items: center;
 }
 
 .reward-input {
     flex: 1;
+    padding: 0.4rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.reward-amount-input {
+    width: 80px;
     padding: 0.4rem;
     border: 1px solid #ddd;
     border-radius: 4px;
@@ -524,6 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
     font-size: 1rem;
     font-weight: bold;
     transition: background 0.2s;
+    flex-shrink: 0;
 }
 
 .btn-add-reward:hover {
@@ -533,7 +554,8 @@ document.addEventListener('DOMContentLoaded', function() {
 .item-title-input:focus,
 .item-description-input:focus,
 .item-category-input:focus,
-.reward-input:focus {
+.reward-input:focus,
+.reward-amount-input:focus {
     outline: none;
     border-color: #3498db;
 }

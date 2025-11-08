@@ -61,8 +61,8 @@
         <ul class="items-list">
             {% for item in items %}
             {% set reward_names = [] %}
-            {% for r in item.rewards.all() %}
-                {% set _ = reward_names.append(r.name) %}
+            {% for item_reward in item.rewards %}
+                {% set _ = reward_names.append(item_reward.reward.name) %}
             {% endfor %}
             <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" data-category="{{ item.category or '' }}" data-rewards="{{ ','.join(reward_names) }}">
                 <div class="item-content">
@@ -75,10 +75,10 @@
                         {% if item.category %}
                             <span class="item-category-badge">{{ item.category }}</span>
                         {% endif %}
-                        {% if item.rewards.count() > 0 %}
+                        {% if item.rewards|length > 0 %}
                             <div class="item-rewards-display">
-                                {% for reward in item.rewards.all() %}
-                                    <span class="item-reward-badge">🏆 {{ reward.name }}</span>
+                                {% for item_reward in item.rewards %}
+                                    <span class="item-reward-badge">🏆 {{ item_reward.amount }}x {{ item_reward.reward.name }}</span>
                                 {% endfor %}
                             </div>
                         {% endif %}
