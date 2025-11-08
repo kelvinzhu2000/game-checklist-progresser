@@ -6,12 +6,13 @@
 <div class="form-container">
     <h1>Edit Checklist</h1>
     <p class="info-message">Editing checklist for: <strong>{{ checklist.game.name }}</strong></p>
-    <form method="POST" action="{{ url_for('checklist.edit', checklist_id=checklist.id) }}">
+    
+    <form id="editChecklistForm" method="POST" action="{{ url_for('checklist.edit', checklist_id=checklist.id) }}">
         {{ form.hidden_tag() }}
         
         <div class="form-group">
             {{ form.title.label }}
-            {{ form.title(class="form-control") }}
+            {{ form.title(class="form-control", id="checklist-title") }}
             {% if form.title.errors %}
                 <ul class="errors">
                     {% for error in form.title.errors %}
@@ -23,7 +24,7 @@
         
         <div class="form-group">
             {{ form.description.label }}
-            {{ form.description(class="form-control", rows="4") }}
+            {{ form.description(class="form-control", rows="4", id="checklist-description") }}
             {% if form.description.errors %}
                 <ul class="errors">
                     {% for error in form.description.errors %}
@@ -31,6 +32,32 @@
                     {% endfor %}
                 </ul>
             {% endif %}
+        </div>
+        
+        <div class="form-group checkbox">
+            {{ form.is_public(id="checklist-is-public") }}
+            {{ form.is_public.label }}
+        </div>
+
+        <!-- Items Management Section -->
+        <div class="items-management">
+            <h2>Checklist Items</h2>
+            <p class="info-text">Add, remove, or reorder items. Changes won't be saved until you click "Save Changes" below.</p>
+            
+            <div id="items-list" class="editable-items-list">
+                {% for item in items %}
+                <div class="editable-item" data-item-id="{{ item.id }}">
+                    <div class="item-handle">☰</div>
+                    <div class="item-fields">
+                        <input type="text" class="item-title-input" value="{{ item.title }}" placeholder="Item title">
+                        <textarea class="item-description-input" placeholder="Item description (optional)">{{ item.description or '' }}</textarea>
+                    </div>
+                    <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <button type="button" class="btn btn-secondary" onclick="addNewItem()">+ Add Item</button>
         </div>
         
         <div class="form-group">
@@ -46,15 +73,293 @@
             {% endif %}
         </div>
         
-        <div class="form-group checkbox">
-            {{ form.is_public() }}
-            {{ form.is_public.label }}
-        </div>
-        
-        <div class="form-group">
-            {{ form.submit(class="btn btn-primary") }}
+        <div class="form-group form-actions">
+            <button type="button" class="btn btn-primary" onclick="saveChanges()">Save Changes</button>
             <a href="{{ url_for('checklist.view', checklist_id=checklist.id) }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+let deletedItemIds = [];
+let newItemCounter = 0;
+
+function addNewItem() {
+    const itemsList = document.getElementById('items-list');
+    const newItem = document.createElement('div');
+    newItem.className = 'editable-item';
+    newItem.setAttribute('data-item-id', 'new-' + newItemCounter++);
+    
+    newItem.innerHTML = `
+        <div class="item-handle">☰</div>
+        <div class="item-fields">
+            <input type="text" class="item-title-input" placeholder="Item title">
+            <textarea class="item-description-input" placeholder="Item description (optional)"></textarea>
+        </div>
+        <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
+    `;
+    
+    itemsList.appendChild(newItem);
+}
+
+function removeItem(button) {
+    const item = button.closest('.editable-item');
+    const itemId = item.getAttribute('data-item-id');
+    
+    // Track deleted items (only if it's an existing item, not a new one)
+    if (itemId && !itemId.startsWith('new-')) {
+        deletedItemIds.push(parseInt(itemId));
+    }
+    
+    item.remove();
+}
+
+function collectItemsData() {
+    const items = [];
+    const itemElements = document.querySelectorAll('.editable-item');
+    
+    itemElements.forEach((itemEl, index) => {
+        const itemId = itemEl.getAttribute('data-item-id');
+        const title = itemEl.querySelector('.item-title-input').value.trim();
+        const description = itemEl.querySelector('.item-description-input').value.trim();
+        
+        if (title) {  // Only include items with a title
+            items.push({
+                id: itemId.startsWith('new-') ? 'new' : parseInt(itemId),
+                title: title,
+                description: description
+            });
+        }
+    });
+    
+    return items;
+}
+
+function saveChanges() {
+    const title = document.getElementById('checklist-title').value;
+    const description = document.getElementById('checklist-description').value;
+    const isPublic = document.getElementById('checklist-is-public').checked;
+    const items = collectItemsData();
+    
+    if (!title.trim()) {
+        alert('Please enter a checklist title');
+        return;
+    }
+    
+    const data = {
+        title: title,
+        description: description,
+        is_public: isPublic,
+        items: items,
+        deleted_items: deletedItemIds
+    };
+    
+    // Disable the save button to prevent double-clicks
+    const saveButton = document.querySelector('.btn-primary');
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saving...';
+    
+    fetch('{{ url_for("checklist.batch_update", checklist_id=checklist.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Redirect to view page on success
+            window.location.href = '{{ url_for("checklist.view", checklist_id=checklist.id) }}';
+        } else {
+            alert('Error: ' + (data.error || 'Failed to save changes'));
+            saveButton.disabled = false;
+            saveButton.textContent = 'Save Changes';
+        }
+    })
+    .catch(error => {
+        alert('Error saving changes. Please try again.');
+        saveButton.disabled = false;
+        saveButton.textContent = 'Save Changes';
+    });
+}
+
+// Enable drag and drop for reordering
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsList = document.getElementById('items-list');
+    let draggedItem = null;
+    
+    itemsList.addEventListener('dragstart', function(e) {
+        if (e.target.classList.contains('editable-item')) {
+            draggedItem = e.target;
+            e.target.classList.add('dragging');
+        }
+    });
+    
+    itemsList.addEventListener('dragend', function(e) {
+        if (e.target.classList.contains('editable-item')) {
+            e.target.classList.remove('dragging');
+        }
+    });
+    
+    itemsList.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        const afterElement = getDragAfterElement(itemsList, e.clientY);
+        if (afterElement == null) {
+            itemsList.appendChild(draggedItem);
+        } else {
+            itemsList.insertBefore(draggedItem, afterElement);
+        }
+    });
+    
+    // Make items draggable
+    document.querySelectorAll('.editable-item').forEach(item => {
+        item.setAttribute('draggable', 'true');
+    });
+    
+    // Observe new items added dynamically
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.classList && node.classList.contains('editable-item')) {
+                    node.setAttribute('draggable', 'true');
+                }
+            });
+        });
+    });
+    
+    observer.observe(itemsList, { childList: true });
+});
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.editable-item:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+</script>
+
+<style>
+.items-management {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.items-management h2 {
+    margin-bottom: 0.5rem;
+    font-size: 1.3rem;
+}
+
+.info-text {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.editable-items-list {
+    margin: 1rem 0;
+    min-height: 50px;
+}
+
+.editable-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.editable-item:hover {
+    border-color: #3498db;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.editable-item.dragging {
+    opacity: 0.5;
+}
+
+.item-handle {
+    cursor: move;
+    color: #999;
+    font-size: 1.2rem;
+    padding: 0.5rem;
+    user-select: none;
+}
+
+.item-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.item-title-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+.item-description-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    min-height: 60px;
+    resize: vertical;
+}
+
+.item-title-input:focus,
+.item-description-input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.btn-remove-item {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: background 0.2s;
+}
+
+.btn-remove-item:hover {
+    background: #c0392b;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+</style>
 {% endblock %}
