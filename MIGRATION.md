@@ -1,5 +1,24 @@
 # Database Migration Guide
 
+## Quick Start for Common Issues
+
+### Error: "NOT NULL constraint failed: checklists.game_name"
+
+If you see this error when creating a new checklist, your database has the old `game_name` column that needs to be removed. 
+
+**Solution:**
+```bash
+# Backup your database first!
+cp game_checklist.db game_checklist.db.backup
+
+# Run the migration to fix the issue
+python add_reward_tables_migration.py
+```
+
+This will automatically detect and remove the legacy `game_name` column while preserving all your data.
+
+---
+
 ## Migrating from game_name to Game Model
 
 This guide explains how to migrate an existing database from the old schema (where `Checklist` has a `game_name` string field) to the new schema (where `Checklist` has a `game_id` foreign key to the `Game` table).
@@ -41,24 +60,22 @@ If you have an existing database with checklists using `game_name`:
 
 2. **Update your code** to the version with the Game model
 
-3. **Run the migration script**:
+3. **Run the game model migration script**:
    ```bash
    python migrate_to_game_model.py
    ```
 
-4. **Test your application** thoroughly after migration
-
-5. **Optional: Remove old game_name column** (after confirming everything works):
-   
-   For SQLite:
-   ```sql
-   -- SQLite doesn't support DROP COLUMN easily, so this requires recreating the table
-   -- This is optional and can be done later if needed
+4. **Run the reward system migration** (this also cleans up the legacy game_name column):
+   ```bash
+   python add_reward_tables_migration.py
    ```
    
-   For PostgreSQL/MySQL:
-   ```sql
-   ALTER TABLE checklists DROP COLUMN game_name;
+   This script will:
+   - Create the rewards and checklist_item_rewards tables
+   - Automatically detect and remove the legacy `game_name` column if present
+   - Preserve all your existing data
+
+5. **Test your application** thoroughly after migration
    DROP INDEX IF EXISTS ix_checklists_game_name;
    ```
 
