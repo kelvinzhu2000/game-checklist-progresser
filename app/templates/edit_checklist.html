@@ -51,6 +51,7 @@
                     <div class="item-fields">
                         <input type="text" class="item-title-input" value="{{ item.title }}" placeholder="Item title">
                         <textarea class="item-description-input" placeholder="Item description (optional)">{{ item.description or '' }}</textarea>
+                        <input type="text" class="item-category-input" value="{{ item.category or '' }}" placeholder="Category (optional)">
                     </div>
                     <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
                 </div>
@@ -95,6 +96,7 @@ function addNewItem() {
         <div class="item-fields">
             <input type="text" class="item-title-input" placeholder="Item title">
             <textarea class="item-description-input" placeholder="Item description (optional)"></textarea>
+            <input type="text" class="item-category-input" placeholder="Category (optional)">
         </div>
         <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
     `;
@@ -122,12 +124,14 @@ function collectItemsData() {
         const itemId = itemEl.getAttribute('data-item-id');
         const title = itemEl.querySelector('.item-title-input').value.trim();
         const description = itemEl.querySelector('.item-description-input').value.trim();
+        const category = itemEl.querySelector('.item-category-input').value.trim();
         
         if (title) {  // Only include items with a title
             items.push({
                 id: itemId.startsWith('new-') ? 'new' : parseInt(itemId),
                 title: title,
-                description: description
+                description: description,
+                category: category
             });
         }
     });
@@ -326,8 +330,17 @@ function getDragAfterElement(container, y) {
     resize: vertical;
 }
 
+.item-category-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
 .item-title-input:focus,
-.item-description-input:focus {
+.item-description-input:focus,
+.item-category-input:focus {
     outline: none;
     border-color: #3498db;
 }

@@ -42,11 +42,17 @@
     </div>
     
     {% if items %}
+    <!-- Category Filter Legend -->
+    <div id="category-legend" class="category-legend" style="display: none;">
+        <h3>Filter by Category</h3>
+        <div id="category-filters"></div>
+    </div>
+    
     <div class="checklist-items">
         <h2>Checklist Items</h2>
         <ul class="items-list">
             {% for item in items %}
-            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}">
+            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" data-category="{{ item.category or '' }}">
                 <div class="item-content">
                     {% if user_copy %}
                         <form method="POST" action="{{ url_for('checklist.toggle_progress', checklist_id=checklist.id, item_id=item.id) }}" class="checkbox-form">
@@ -54,6 +60,9 @@
                         </form>
                     {% endif %}
                     <div class="item-details">
+                        {% if item.category %}
+                            <span class="item-category-badge">{{ item.category }}</span>
+                        {% endif %}
                         <h3>{{ item.title }}</h3>
                         {% if item.description %}
                             <p>{{ item.description }}</p>
@@ -68,4 +77,169 @@
         <p>No items in this checklist yet. {% if checklist.creator_id == current_user.id %}<a href="{{ url_for('checklist.add_item', checklist_id=checklist.id) }}">Add the first item!</a>{% endif %}</p>
     {% endif %}
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get all unique categories from items
+    const items = document.querySelectorAll('.item');
+    const categories = new Set();
+    
+    items.forEach(item => {
+        const category = item.getAttribute('data-category');
+        if (category && category.trim() !== '') {
+            categories.add(category);
+        }
+    });
+    
+    // Only show category legend if there are categories
+    if (categories.size > 0) {
+        const categoryLegend = document.getElementById('category-legend');
+        const categoryFilters = document.getElementById('category-filters');
+        categoryLegend.style.display = 'block';
+        
+        // Create filter buttons for each category
+        const sortedCategories = Array.from(categories).sort();
+        sortedCategories.forEach(category => {
+            const filterBtn = document.createElement('button');
+            filterBtn.className = 'category-filter-btn active';
+            filterBtn.textContent = category;
+            filterBtn.setAttribute('data-category', category);
+            filterBtn.onclick = function() {
+                toggleCategoryFilter(this);
+            };
+            categoryFilters.appendChild(filterBtn);
+        });
+        
+        // Add "All" button
+        const allBtn = document.createElement('button');
+        allBtn.className = 'category-filter-btn all-btn active';
+        allBtn.textContent = 'All';
+        allBtn.onclick = function() {
+            toggleAllCategories();
+        };
+        categoryFilters.insertBefore(allBtn, categoryFilters.firstChild);
+    }
+});
+
+function toggleCategoryFilter(btn) {
+    const category = btn.getAttribute('data-category');
+    btn.classList.toggle('active');
+    
+    // Filter items
+    const items = document.querySelectorAll('.item');
+    items.forEach(item => {
+        const itemCategory = item.getAttribute('data-category');
+        if (itemCategory === category) {
+            if (btn.classList.contains('active')) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        }
+    });
+    
+    // Update "All" button state
+    updateAllButtonState();
+}
+
+function toggleAllCategories() {
+    const allBtn = document.querySelector('.category-filter-btn.all-btn');
+    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.all-btn)');
+    const items = document.querySelectorAll('.item');
+    
+    const shouldActivateAll = !allBtn.classList.contains('active');
+    
+    if (shouldActivateAll) {
+        // Activate all categories
+        allBtn.classList.add('active');
+        categoryBtns.forEach(btn => btn.classList.add('active'));
+        items.forEach(item => item.style.display = '');
+    } else {
+        // Deactivate all categories
+        allBtn.classList.remove('active');
+        categoryBtns.forEach(btn => btn.classList.remove('active'));
+        items.forEach(item => item.style.display = 'none');
+    }
+}
+
+function updateAllButtonState() {
+    const allBtn = document.querySelector('.category-filter-btn.all-btn');
+    const categoryBtns = document.querySelectorAll('.category-filter-btn:not(.all-btn)');
+    const allActive = Array.from(categoryBtns).every(btn => btn.classList.contains('active'));
+    
+    if (allActive) {
+        allBtn.classList.add('active');
+    } else {
+        allBtn.classList.remove('active');
+    }
+}
+</script>
+
+<style>
+.category-legend {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.category-legend h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+#category-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.category-filter-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #3498db;
+    background: white;
+    color: #3498db;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.category-filter-btn:hover {
+    background: #e3f2fd;
+}
+
+.category-filter-btn.active {
+    background: #3498db;
+    color: white;
+}
+
+.category-filter-btn.all-btn {
+    border-color: #2c3e50;
+    color: #2c3e50;
+}
+
+.category-filter-btn.all-btn.active {
+    background: #2c3e50;
+    color: white;
+}
+
+.item-category-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #e3f2fd;
+    color: #1976d2;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.item {
+    transition: opacity 0.2s;
+}
+</style>
 {% endblock %}
