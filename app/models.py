@@ -3,6 +3,12 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
+# Association table for many-to-many relationship between ChecklistItem and Reward
+checklist_item_rewards = db.Table('checklist_item_rewards',
+    db.Column('checklist_item_id', db.Integer, db.ForeignKey('checklist_items.id'), primary_key=True),
+    db.Column('reward_id', db.Integer, db.ForeignKey('rewards.id'), primary_key=True)
+)
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -79,6 +85,10 @@ class ChecklistItem(db.Model):
     order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Relationships
+    rewards = db.relationship('Reward', secondary=checklist_item_rewards, 
+                             backref=db.backref('items', lazy='dynamic'), lazy='dynamic')
+    
     def __repr__(self):
         return f'<ChecklistItem {self.title}>'
 
@@ -118,3 +128,13 @@ class UserProgress(db.Model):
     
     def __repr__(self):
         return f'<UserProgress item_id={self.item_id} completed={self.completed}>'
+
+class Reward(db.Model):
+    __tablename__ = 'rewards'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Reward {self.name}>'

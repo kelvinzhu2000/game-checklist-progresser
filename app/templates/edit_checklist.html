@@ -52,6 +52,21 @@
                         <input type="text" class="item-title-input" value="{{ item.title }}" placeholder="Item title">
                         <textarea class="item-description-input" placeholder="Item description (optional)">{{ item.description or '' }}</textarea>
                         <input type="text" class="item-category-input" list="categories-list" value="{{ item.category or '' }}" placeholder="Category (optional)" autocomplete="off">
+                        <div class="item-rewards-container">
+                            <label class="rewards-label">Rewards:</label>
+                            <div class="rewards-tags">
+                                {% for reward in item.rewards.all() %}
+                                <span class="reward-tag">
+                                    {{ reward.name }}
+                                    <button type="button" class="remove-reward" onclick="removeRewardTag(this)" title="Remove reward">×</button>
+                                </span>
+                                {% endfor %}
+                            </div>
+                            <div class="add-reward-input">
+                                <input type="text" class="reward-input" list="rewards-list" placeholder="Add reward..." autocomplete="off">
+                                <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
+                            </div>
+                        </div>
                     </div>
                     <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
                 </div>
@@ -59,6 +74,7 @@
             </div>
             
             <datalist id="categories-list"></datalist>
+            <datalist id="rewards-list"></datalist>
             
             <button type="button" class="btn btn-secondary" onclick="addNewItem()">+ Add Item</button>
         </div>
@@ -99,6 +115,14 @@ function addNewItem() {
             <input type="text" class="item-title-input" placeholder="Item title">
             <textarea class="item-description-input" placeholder="Item description (optional)"></textarea>
             <input type="text" class="item-category-input" list="categories-list" placeholder="Category (optional)" autocomplete="off">
+            <div class="item-rewards-container">
+                <label class="rewards-label">Rewards:</label>
+                <div class="rewards-tags"></div>
+                <div class="add-reward-input">
+                    <input type="text" class="reward-input" list="rewards-list" placeholder="Add reward..." autocomplete="off">
+                    <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
+                </div>
+            </div>
         </div>
         <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
     `;
@@ -118,6 +142,44 @@ function removeItem(button) {
     item.remove();
 }
 
+function addReward(button) {
+    const container = button.closest('.item-rewards-container');
+    const input = container.querySelector('.reward-input');
+    const rewardName = input.value.trim();
+    
+    if (!rewardName) {
+        return;
+    }
+    
+    // Check if reward already exists in this item
+    const existingTags = container.querySelectorAll('.reward-tag');
+    for (let tag of existingTags) {
+        const tagText = tag.textContent.replace('×', '').trim();
+        if (tagText.toLowerCase() === rewardName.toLowerCase()) {
+            alert('This reward is already added to this item');
+            input.value = '';
+            return;
+        }
+    }
+    
+    // Create reward tag
+    const rewardsContainer = container.querySelector('.rewards-tags');
+    const rewardTag = document.createElement('span');
+    rewardTag.className = 'reward-tag';
+    rewardTag.innerHTML = `
+        ${rewardName}
+        <button type="button" class="remove-reward" onclick="removeRewardTag(this)" title="Remove reward">×</button>
+    `;
+    rewardsContainer.appendChild(rewardTag);
+    
+    // Clear input
+    input.value = '';
+}
+
+function removeRewardTag(button) {
+    button.closest('.reward-tag').remove();
+}
+
 function collectItemsData() {
     const items = [];
     const itemElements = document.querySelectorAll('.editable-item');
@@ -128,12 +190,23 @@ function collectItemsData() {
         const description = itemEl.querySelector('.item-description-input').value.trim();
         const category = itemEl.querySelector('.item-category-input').value.trim();
         
+        // Collect rewards
+        const rewards = [];
+        const rewardTags = itemEl.querySelectorAll('.reward-tag');
+        rewardTags.forEach(tag => {
+            const rewardName = tag.textContent.replace('×', '').trim();
+            if (rewardName) {
+                rewards.push(rewardName);
+            }
+        });
+        
         if (title) {  // Only include items with a title
             items.push({
                 id: itemId.startsWith('new-') ? 'new' : parseInt(itemId),
                 title: title,
                 description: description,
-                category: category
+                category: category,
+                rewards: rewards
             });
         }
     });
@@ -266,6 +339,32 @@ fetch('{{ url_for("main.get_categories_for_game", game_id=checklist.game_id) }}'
     .catch(error => {
         console.error('Error fetching categories:', error);
     });
+
+// Fetch rewards for auto-complete
+fetch('{{ url_for("checklist.get_rewards", checklist_id=checklist.id) }}')
+    .then(response => response.json())
+    .then(data => {
+        const datalist = document.getElementById('rewards-list');
+        data.rewards.forEach(reward => {
+            const option = document.createElement('option');
+            option.value = reward;
+            datalist.appendChild(option);
+        });
+    })
+    .catch(error => {
+        console.error('Error fetching rewards:', error);
+    });
+
+// Enable Enter key to add rewards
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('keypress', function(e) {
+        if (e.target.classList.contains('reward-input') && e.key === 'Enter') {
+            e.preventDefault();
+            const addButton = e.target.closest('.add-reward-input').querySelector('.btn-add-reward');
+            addReward(addButton);
+        }
+    });
+});
 </script>
 
 <style>
@@ -355,9 +454,86 @@ fetch('{{ url_for("main.get_categories_for_game", game_id=checklist.game_id) }}'
     font-size: 0.9rem;
 }
 
+.item-rewards-container {
+    margin-top: 0.5rem;
+}
+
+.rewards-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.rewards-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    min-height: 20px;
+}
+
+.reward-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: #3498db;
+    color: white;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.remove-reward {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    margin-left: 0.25rem;
+}
+
+.remove-reward:hover {
+    color: #f8d7da;
+}
+
+.add-reward-input {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.reward-input {
+    flex: 1;
+    padding: 0.4rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.btn-add-reward {
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.btn-add-reward:hover {
+    background: #229954;
+}
+
 .item-title-input:focus,
 .item-description-input:focus,
-.item-category-input:focus {
+.item-category-input:focus,
+.reward-input:focus {
     outline: none;
     border-color: #3498db;
 }
