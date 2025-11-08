@@ -371,6 +371,7 @@ def batch_update(checklist_id):
                 if item and item.checklist_id == checklist_id:
                     item.title = item_data.get('title', item.title)
                     item.description = item_data.get('description', item.description)
+                    item.category = item_data.get('category', item.category)
                     item.order = idx + 1
                     existing_item_ids.add(item_id)
             else:
@@ -379,6 +380,7 @@ def batch_update(checklist_id):
                     checklist_id=checklist_id,
                     title=item_data.get('title', ''),
                     description=item_data.get('description', ''),
+                    category=item_data.get('category', ''),
                     order=idx + 1
                 )
                 db.session.add(new_item)
@@ -418,6 +420,7 @@ def add_item(checklist_id):
             checklist_id=checklist_id,
             title=form.title.data,
             description=form.description.data,
+            category=form.category.data,
             order=max_order + 1
         )
         db.session.add(item)
@@ -479,6 +482,23 @@ def toggle_progress(checklist_id, item_id):
     db.session.commit()
     
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
+
+@checklist_bp.route('/<int:checklist_id>/categories', methods=['GET'])
+def get_categories(checklist_id):
+    """Get unique categories for a checklist."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    if not checklist.is_public and (not current_user.is_authenticated or checklist.creator_id != current_user.id):
+        abort(403)
+    
+    categories = db.session.query(ChecklistItem.category).filter(
+        ChecklistItem.checklist_id == checklist_id,
+        ChecklistItem.category.isnot(None),
+        ChecklistItem.category != ''
+    ).distinct().all()
+    
+    category_list = [cat[0] for cat in categories]
+    return jsonify({'categories': category_list})
 
 @checklist_bp.route('/<int:checklist_id>/delete', methods=['POST'])
 @login_required
