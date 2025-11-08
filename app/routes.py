@@ -568,3 +568,30 @@ def clear_game():
 def my_checklists():
     """Legacy route - redirect to games page."""
     return redirect(url_for('main.games'))
+
+@main_bp.route('/api/game-names')
+def get_game_names():
+    """Get all unique game names for auto-complete."""
+    games = Game.query.order_by(Game.name).all()
+    game_names = [game.name for game in games]
+    return jsonify({'game_names': game_names})
+
+@main_bp.route('/api/categories/<int:game_id>')
+def get_categories_for_game(game_id):
+    """Get unique categories for a specific game."""
+    # Get all checklists for this game
+    checklists = Checklist.query.filter_by(game_id=game_id).all()
+    checklist_ids = [c.id for c in checklists]
+    
+    if not checklist_ids:
+        return jsonify({'categories': []})
+    
+    # Get unique categories from all items in these checklists
+    categories = db.session.query(ChecklistItem.category).filter(
+        ChecklistItem.checklist_id.in_(checklist_ids),
+        ChecklistItem.category.isnot(None),
+        ChecklistItem.category != ''
+    ).distinct().all()
+    
+    category_list = [cat[0] for cat in categories]
+    return jsonify({'categories': category_list})

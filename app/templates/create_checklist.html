@@ -25,7 +25,8 @@
         
         <div class="form-group">
             {{ form.game_name.label }}
-            {{ form.game_name(class="form-control", readonly=game is not none) }}
+            {{ form.game_name(class="form-control", readonly=game is not none, list="game-names-list", autocomplete="off") }}
+            <datalist id="game-names-list"></datalist>
             {% if form.game_name.errors %}
                 <ul class="errors">
                     {% for error in form.game_name.errors %}
@@ -75,4 +76,23 @@
         </div>
     </form>
 </div>
+
+<script>
+// Fetch game names for auto-complete
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('{{ url_for("main.get_game_names") }}')
+        .then(response => response.json())
+        .then(data => {
+            const datalist = document.getElementById('game-names-list');
+            data.game_names.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                datalist.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching game names:', error);
+        });
+});
+</script>
 {% endblock %}

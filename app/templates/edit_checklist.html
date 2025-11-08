@@ -51,12 +51,14 @@
                     <div class="item-fields">
                         <input type="text" class="item-title-input" value="{{ item.title }}" placeholder="Item title">
                         <textarea class="item-description-input" placeholder="Item description (optional)">{{ item.description or '' }}</textarea>
-                        <input type="text" class="item-category-input" value="{{ item.category or '' }}" placeholder="Category (optional)">
+                        <input type="text" class="item-category-input" list="categories-list" value="{{ item.category or '' }}" placeholder="Category (optional)" autocomplete="off">
                     </div>
                     <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
                 </div>
                 {% endfor %}
             </div>
+            
+            <datalist id="categories-list"></datalist>
             
             <button type="button" class="btn btn-secondary" onclick="addNewItem()">+ Add Item</button>
         </div>
@@ -96,7 +98,7 @@ function addNewItem() {
         <div class="item-fields">
             <input type="text" class="item-title-input" placeholder="Item title">
             <textarea class="item-description-input" placeholder="Item description (optional)"></textarea>
-            <input type="text" class="item-category-input" placeholder="Category (optional)">
+            <input type="text" class="item-category-input" list="categories-list" placeholder="Category (optional)" autocomplete="off">
         </div>
         <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
     `;
@@ -249,6 +251,21 @@ function getDragAfterElement(container, y) {
         }
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
+
+// Fetch categories for auto-complete
+fetch('{{ url_for("main.get_categories_for_game", game_id=checklist.game_id) }}')
+    .then(response => response.json())
+    .then(data => {
+        const datalist = document.getElementById('categories-list');
+        data.categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            datalist.appendChild(option);
+        });
+    })
+    .catch(error => {
+        console.error('Error fetching categories:', error);
+    });
 </script>
 
 <style>
