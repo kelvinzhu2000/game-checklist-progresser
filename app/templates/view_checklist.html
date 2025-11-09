@@ -90,7 +90,7 @@
                 {% set _ = reward_names.append(item_reward.reward.name) %}
                 {% set _ = reward_data.append(item_reward.reward.name ~ ':' ~ item_reward.amount|string) %}
             {% endfor %}
-            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" 
+            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %}" 
                 data-location="{{ item.location or '' }}"
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
@@ -103,7 +103,8 @@
                                class="item-checkbox" 
                                data-checklist-id="{{ checklist.id }}" 
                                data-item-id="{{ item.id }}" 
-                               {% if progress.get(item.id) %}checked{% endif %} 
+                               {% if progress.get(item.id) %}checked{% endif %}
+                               {% if item_locked.get(item.id) %}disabled{% endif %}
                                onchange="toggleItemProgress(this)">
                     {% endif %}
                     <div class="item-details">
@@ -117,6 +118,26 @@
                             <div class="item-rewards-display">
                                 {% for item_reward in item.rewards %}
                                     <span class="item-reward-badge">🏆 {{ item_reward.amount }}x {{ item_reward.reward.name }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        {% if item.prerequisites|length > 0 %}
+                            <div class="item-prerequisites-display">
+                                <span class="prerequisites-header">Prerequisites:</span>
+                                {% for prereq in item.prerequisites %}
+                                    {% if prereq.prerequisite_item_id %}
+                                        <span class="item-prerequisite-badge {% if user_copy %}{% set prereq_progress = progress.get(prereq.prerequisite_item_id) %}{% if prereq_progress %}prereq-met{% else %}prereq-unmet{% endif %}{% endif %}">
+                                            📋 {{ prereq.prerequisite_item.title }}
+                                        </span>
+                                    {% elif prereq.prerequisite_reward_id %}
+                                        <span class="item-prerequisite-badge prereq-info">
+                                            🏆 {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                        </span>
+                                    {% elif prereq.freeform_text %}
+                                        <span class="item-prerequisite-badge prereq-info">
+                                            ✏️ {{ prereq.freeform_text }}
+                                        </span>
+                                    {% endif %}
                                 {% endfor %}
                             </div>
                         {% endif %}
@@ -154,12 +175,21 @@ function toggleItemProgress(checkbox) {
     })
     .then(response => {
         if (!response.ok) {
-            // If request failed, revert checkbox state
-            checkbox.checked = !isChecked;
-            alert('Failed to update progress. Please try again.');
-            return;
+            return response.json().then(data => {
+                // If request failed, revert checkbox state
+                checkbox.checked = !isChecked;
+                if (data.error === 'Prerequisites not met') {
+                    alert('Cannot complete this item - prerequisites must be completed first!');
+                } else {
+                    alert('Failed to update progress. Please try again.');
+                }
+                throw new Error(data.error || 'Failed to update');
+            });
         }
-        
+        return response.json();
+    })
+    .then(data => {
+        if (data && data.success) {
         // Update the item's completed state
         listItem.setAttribute('data-completed', isChecked ? 'true' : 'false');
         
@@ -876,5 +906,76 @@ function updateRewardTally() {
     padding: 1rem;
     margin: 0;
 }
+
+/* Prerequisite display styles */
+.item-prerequisites-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+
+.prerequisites-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+}
+
+.item-prerequisite-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #e8d7f1;
+    color: #5e2a84;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid #9b59b6;
+}
+
+.item-prerequisite-badge.prereq-met {
+    background: #d4edda;
+    color: #155724;
+    border-color: #28a745;
+}
+
+.item-prerequisite-badge.prereq-unmet {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #dc3545;
+}
+
+.item-prerequisite-badge.prereq-info {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffc107;
+}
+
+/* Locked item styles */
+.item.locked {
+    opacity: 0.6;
+    background: #f5f5f5;
+}
+
+.item.locked .item-checkbox {
+    cursor: not-allowed;
+}
+
+.item.locked h3 {
+    color: #999;
+}
+
+.item.locked::before {
+    content: "🔒";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 1.2rem;
+}
+
+.item {
+    position: relative;
+}
+
 </style>
 {% endblock %}

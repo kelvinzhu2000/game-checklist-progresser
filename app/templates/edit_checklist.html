@@ -69,6 +69,44 @@
                                 <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
                             </div>
                         </div>
+                        <div class="item-prerequisites-container">
+                            <label class="prerequisites-label">Prerequisites:</label>
+                            <div class="prerequisites-tags">
+                                {% for prereq in item.prerequisites %}
+                                {% if prereq.prerequisite_item_id %}
+                                <span class="prerequisite-tag" data-prereq-type="item" data-prereq-item-id="{{ prereq.prerequisite_item_id }}">
+                                    📋 Item: {{ prereq.prerequisite_item.title }}
+                                    <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+                                </span>
+                                {% elif prereq.prerequisite_reward_id %}
+                                <span class="prerequisite-tag" data-prereq-type="reward" data-prereq-reward-name="{{ prereq.prerequisite_reward.name }}" data-consumes="{{ prereq.consumes_reward }}">
+                                    🏆 Reward: {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                    <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+                                </span>
+                                {% elif prereq.freeform_text %}
+                                <span class="prerequisite-tag" data-prereq-type="freeform" data-freeform-text="{{ prereq.freeform_text }}">
+                                    ✏️ {{ prereq.freeform_text }}
+                                    <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+                                </span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            <div class="add-prerequisite-input">
+                                <select class="prerequisite-type-select">
+                                    <option value="item">Checklist Item</option>
+                                    <option value="reward">Reward</option>
+                                    <option value="freeform">Custom Text</option>
+                                </select>
+                                <input type="text" class="prerequisite-input" placeholder="Select type first..." disabled>
+                                <select class="prerequisite-item-select" style="display: none;"></select>
+                                <input type="text" class="prerequisite-reward-input" list="rewards-list" placeholder="Reward name..." style="display: none;" autocomplete="off">
+                                <label class="consumes-checkbox-label" style="display: none;">
+                                    <input type="checkbox" class="prerequisite-consumes-checkbox">
+                                    Consumes
+                                </label>
+                                <button type="button" class="btn-add-prerequisite" onclick="addPrerequisite(this)">+</button>
+                            </div>
+                        </div>
                     </div>
                     <button type="button" class="btn-remove-item" onclick="removeItem(this)">✕</button>
                 </div>
@@ -126,6 +164,25 @@ function addNewItem() {
                     <input type="text" class="reward-input" list="rewards-list" placeholder="Reward name..." autocomplete="off">
                     <input type="number" class="reward-amount-input" placeholder="Amount" value="1" min="1">
                     <button type="button" class="btn-add-reward" onclick="addReward(this)">+</button>
+                </div>
+            </div>
+            <div class="item-prerequisites-container">
+                <label class="prerequisites-label">Prerequisites:</label>
+                <div class="prerequisites-tags"></div>
+                <div class="add-prerequisite-input">
+                    <select class="prerequisite-type-select">
+                        <option value="item">Checklist Item</option>
+                        <option value="reward">Reward</option>
+                        <option value="freeform">Custom Text</option>
+                    </select>
+                    <input type="text" class="prerequisite-input" placeholder="Select type first..." disabled>
+                    <select class="prerequisite-item-select" style="display: none;"></select>
+                    <input type="text" class="prerequisite-reward-input" list="rewards-list" placeholder="Reward name..." style="display: none;" autocomplete="off">
+                    <label class="consumes-checkbox-label" style="display: none;">
+                        <input type="checkbox" class="prerequisite-consumes-checkbox">
+                        Consumes
+                    </label>
+                    <button type="button" class="btn-add-prerequisite" onclick="addPrerequisite(this)">+</button>
                 </div>
             </div>
         </div>
@@ -190,6 +247,122 @@ function removeRewardTag(button) {
     button.closest('.reward-tag').remove();
 }
 
+function addPrerequisite(button) {
+    const container = button.closest('.item-prerequisites-container');
+    const typeSelect = container.querySelector('.prerequisite-type-select');
+    const type = typeSelect.value;
+    
+    let prereqData = {};
+    
+    if (type === 'item') {
+        const itemSelect = container.querySelector('.prerequisite-item-select');
+        const selectedOption = itemSelect.options[itemSelect.selectedIndex];
+        if (!selectedOption || !selectedOption.value) {
+            alert('Please select a checklist item');
+            return;
+        }
+        prereqData = {
+            type: 'item',
+            itemId: selectedOption.value,
+            itemTitle: selectedOption.text
+        };
+    } else if (type === 'reward') {
+        const rewardInput = container.querySelector('.prerequisite-reward-input');
+        const rewardName = rewardInput.value.trim();
+        const consumesCheckbox = container.querySelector('.prerequisite-consumes-checkbox');
+        const consumes = consumesCheckbox.checked;
+        
+        if (!rewardName) {
+            alert('Please enter a reward name');
+            return;
+        }
+        prereqData = {
+            type: 'reward',
+            rewardName: rewardName,
+            consumes: consumes
+        };
+    } else if (type === 'freeform') {
+        const freeformInput = container.querySelector('.prerequisite-input');
+        const freeformText = freeformInput.value.trim();
+        
+        if (!freeformText) {
+            alert('Please enter prerequisite text');
+            return;
+        }
+        prereqData = {
+            type: 'freeform',
+            freeformText: freeformText
+        };
+    }
+    
+    // Create prerequisite tag
+    const prerequisitesContainer = container.querySelector('.prerequisites-tags');
+    const prereqTag = document.createElement('span');
+    prereqTag.className = 'prerequisite-tag';
+    prereqTag.setAttribute('data-prereq-type', prereqData.type);
+    
+    if (prereqData.type === 'item') {
+        prereqTag.setAttribute('data-prereq-item-id', prereqData.itemId);
+        prereqTag.innerHTML = `
+            📋 Item: ${prereqData.itemTitle}
+            <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+        `;
+    } else if (prereqData.type === 'reward') {
+        prereqTag.setAttribute('data-prereq-reward-name', prereqData.rewardName);
+        prereqTag.setAttribute('data-consumes', prereqData.consumes);
+        prereqTag.innerHTML = `
+            🏆 Reward: ${prereqData.rewardName}${prereqData.consumes ? ' (consumes)' : ''}
+            <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+        `;
+    } else if (prereqData.type === 'freeform') {
+        prereqTag.setAttribute('data-freeform-text', prereqData.freeformText);
+        prereqTag.innerHTML = `
+            ✏️ ${prereqData.freeformText}
+            <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
+        `;
+    }
+    
+    prerequisitesContainer.appendChild(prereqTag);
+    
+    // Clear inputs
+    container.querySelector('.prerequisite-input').value = '';
+    container.querySelector('.prerequisite-reward-input').value = '';
+    container.querySelector('.prerequisite-consumes-checkbox').checked = false;
+    if (container.querySelector('.prerequisite-item-select')) {
+        container.querySelector('.prerequisite-item-select').selectedIndex = 0;
+    }
+}
+
+function removePrerequisiteTag(button) {
+    button.closest('.prerequisite-tag').remove();
+}
+
+function updatePrerequisiteInputs(container) {
+    const typeSelect = container.querySelector('.prerequisite-type-select');
+    const type = typeSelect.value;
+    
+    // Hide all inputs
+    container.querySelector('.prerequisite-input').style.display = 'none';
+    container.querySelector('.prerequisite-item-select').style.display = 'none';
+    container.querySelector('.prerequisite-reward-input').style.display = 'none';
+    container.querySelector('.consumes-checkbox-label').style.display = 'none';
+    
+    // Show relevant input based on type
+    if (type === 'item') {
+        container.querySelector('.prerequisite-item-select').style.display = 'inline-block';
+        container.querySelector('.prerequisite-input').disabled = true;
+    } else if (type === 'reward') {
+        container.querySelector('.prerequisite-reward-input').style.display = 'inline-block';
+        container.querySelector('.consumes-checkbox-label').style.display = 'inline-block';
+        container.querySelector('.prerequisite-input').disabled = true;
+    } else if (type === 'freeform') {
+        container.querySelector('.prerequisite-input').style.display = 'inline-block';
+        container.querySelector('.prerequisite-input').disabled = false;
+        container.querySelector('.prerequisite-input').placeholder = 'Enter custom prerequisite...';
+    }
+}
+
+
 function collectItemsData() {
     const items = [];
     const itemElements = document.querySelectorAll('.editable-item');
@@ -215,6 +388,41 @@ function collectItemsData() {
             }
         });
         
+        // Collect prerequisites
+        const prerequisites = [];
+        const prereqTags = itemEl.querySelectorAll('.prerequisite-tag');
+        prereqTags.forEach(tag => {
+            const prereqType = tag.getAttribute('data-prereq-type');
+            
+            if (prereqType === 'item') {
+                const prereqItemId = tag.getAttribute('data-prereq-item-id');
+                if (prereqItemId) {
+                    prerequisites.push({
+                        type: 'item',
+                        prerequisite_item_id: parseInt(prereqItemId)
+                    });
+                }
+            } else if (prereqType === 'reward') {
+                const rewardName = tag.getAttribute('data-prereq-reward-name');
+                const consumes = tag.getAttribute('data-consumes') === 'true';
+                if (rewardName) {
+                    prerequisites.push({
+                        type: 'reward',
+                        reward_name: rewardName,
+                        consumes_reward: consumes
+                    });
+                }
+            } else if (prereqType === 'freeform') {
+                const freeformText = tag.getAttribute('data-freeform-text');
+                if (freeformText) {
+                    prerequisites.push({
+                        type: 'freeform',
+                        freeform_text: freeformText
+                    });
+                }
+            }
+        });
+        
         if (title) {  // Only include items with a title
             items.push({
                 id: itemId.startsWith('new-') ? 'new' : parseInt(itemId),
@@ -222,7 +430,8 @@ function collectItemsData() {
                 description: description,
                 location: location,
                 category: category,
-                rewards: rewards
+                rewards: rewards,
+                prerequisites: prerequisites
             });
         }
     });
@@ -395,7 +604,74 @@ document.addEventListener('DOMContentLoaded', function() {
             addReward(addButton);
         }
     });
+    
+    // Initialize prerequisite type selects
+    function initPrerequisiteTypeSelect(container) {
+        const typeSelect = container.querySelector('.prerequisite-type-select');
+        if (typeSelect) {
+            typeSelect.addEventListener('change', function() {
+                updatePrerequisiteInputs(container);
+                populateItemSelect(container);
+            });
+            // Initial update
+            updatePrerequisiteInputs(container);
+            populateItemSelect(container);
+        }
+    }
+    
+    // Initialize all existing items
+    document.querySelectorAll('.item-prerequisites-container').forEach(container => {
+        initPrerequisiteTypeSelect(container);
+    });
+    
+    // Observe for new items added dynamically
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                if (node.nodeType === 1 && node.classList && node.classList.contains('editable-item')) {
+                    const container = node.querySelector('.item-prerequisites-container');
+                    if (container) {
+                        initPrerequisiteTypeSelect(container);
+                    }
+                }
+            });
+        });
+    });
+    
+    const itemsList = document.getElementById('items-list');
+    if (itemsList) {
+        observer.observe(itemsList, { childList: true });
+    }
 });
+
+// Populate the item select dropdown with all other items
+function populateItemSelect(container) {
+    const typeSelect = container.querySelector('.prerequisite-type-select');
+    if (typeSelect.value !== 'item') {
+        return;
+    }
+    
+    const itemSelect = container.querySelector('.prerequisite-item-select');
+    const currentItem = container.closest('.editable-item');
+    const currentItemId = currentItem.getAttribute('data-item-id');
+    
+    // Clear existing options
+    itemSelect.innerHTML = '<option value="">Select an item...</option>';
+    
+    // Get all items except the current one
+    document.querySelectorAll('.editable-item').forEach(item => {
+        const itemId = item.getAttribute('data-item-id');
+        if (itemId !== currentItemId) {
+            const titleInput = item.querySelector('.item-title-input');
+            const title = titleInput.value.trim() || '(Untitled)';
+            const option = document.createElement('option');
+            option.value = itemId;
+            option.textContent = title;
+            itemSelect.appendChild(option);
+        }
+    });
+}
+
 </script>
 
 <style>
@@ -618,5 +894,109 @@ document.addEventListener('DOMContentLoaded', function() {
 .btn-danger:hover {
     background-color: #c0392b;
 }
+
+/* Prerequisite styles */
+.item-prerequisites-container {
+    margin-top: 0.5rem;
+}
+
+.prerequisites-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.prerequisites-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    min-height: 20px;
+}
+
+.prerequisite-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: #9b59b6;
+    color: white;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.remove-prerequisite {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    margin-left: 0.25rem;
+}
+
+.remove-prerequisite:hover {
+    color: #f8d7da;
+}
+
+.add-prerequisite-input {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.prerequisite-type-select {
+    padding: 0.4rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    min-width: 140px;
+}
+
+.prerequisite-input,
+.prerequisite-item-select,
+.prerequisite-reward-input {
+    flex: 1;
+    padding: 0.4rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    min-width: 150px;
+}
+
+.consumes-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.prerequisite-consumes-checkbox {
+    cursor: pointer;
+}
+
+.btn-add-prerequisite {
+    background: #9b59b6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-add-prerequisite:hover {
+    background: #8e44ad;
+}
+
 </style>
 {% endblock %}
