@@ -210,6 +210,8 @@ class ItemPrerequisite(db.Model):
     prerequisite_reward_id = db.Column(db.Integer, db.ForeignKey('rewards.id'), nullable=True)
     reward_amount = db.Column(db.Integer, default=1, nullable=True)
     consumes_reward = db.Column(db.Boolean, default=False)
+    reward_location = db.Column(db.String(100), nullable=True)  # Optional: filter reward by location
+    reward_category = db.Column(db.String(100), nullable=True)  # Optional: filter reward by category
     
     # Type 3: Freeform text prerequisite
     freeform_text = db.Column(db.String(200), nullable=True)
@@ -226,6 +228,12 @@ class ItemPrerequisite(db.Model):
         if self.prerequisite_item_id:
             return f'<ItemPrerequisite item_id={self.item_id} requires_item={self.prerequisite_item_id}>'
         elif self.prerequisite_reward_id:
-            return f'<ItemPrerequisite item_id={self.item_id} requires_reward={self.prerequisite_reward_id} amount={self.reward_amount} consumes={self.consumes_reward}>'
+            filters = []
+            if self.reward_location:
+                filters.append(f'location={self.reward_location}')
+            if self.reward_category:
+                filters.append(f'category={self.reward_category}')
+            filter_str = f' {" ".join(filters)}' if filters else ''
+            return f'<ItemPrerequisite item_id={self.item_id} requires_reward={self.prerequisite_reward_id} amount={self.reward_amount} consumes={self.consumes_reward}{filter_str}>'
         else:
             return f'<ItemPrerequisite item_id={self.item_id} freeform="{self.freeform_text}">'
