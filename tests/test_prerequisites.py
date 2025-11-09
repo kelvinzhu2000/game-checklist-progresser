@@ -122,6 +122,7 @@ def test_prerequisite_types(app):
         prereq2 = ItemPrerequisite(
             item_id=item2.id,
             prerequisite_reward_id=reward.id,
+            reward_amount=5,
             consumes_reward=True
         )
         db.session.add(prereq2)
@@ -138,6 +139,7 @@ def test_prerequisite_types(app):
         assert len(item2.prerequisites) == 3
         assert item2.prerequisites[0].prerequisite_item_id == item1.id
         assert item2.prerequisites[1].prerequisite_reward_id == reward.id
+        assert item2.prerequisites[1].reward_amount == 5
         assert item2.prerequisites[1].consumes_reward == True
         assert item2.prerequisites[2].freeform_text == 'Complete tutorial'
 
@@ -256,6 +258,12 @@ def test_batch_update_with_prerequisites(auth_client, app):
                             'prerequisite_item_id': item1_id
                         },
                         {
+                            'type': 'reward',
+                            'reward_name': 'Gold Coin',
+                            'reward_amount': 10,
+                            'consumes_reward': False
+                        },
+                        {
                             'type': 'freeform',
                             'freeform_text': 'Complete tutorial'
                         }
@@ -274,11 +282,17 @@ def test_batch_update_with_prerequisites(auth_client, app):
     # Verify prerequisites were saved
     with app.app_context():
         item2 = ChecklistItem.query.get(item2_id)
-        assert len(item2.prerequisites) == 2
+        assert len(item2.prerequisites) == 3
         
         # Check item prerequisite
         item_prereq = [p for p in item2.prerequisites if p.prerequisite_item_id][0]
         assert item_prereq.prerequisite_item_id == item1_id
+        
+        # Check reward prerequisite
+        reward_prereq = [p for p in item2.prerequisites if p.prerequisite_reward_id][0]
+        assert reward_prereq.prerequisite_reward.name == 'Gold Coin'
+        assert reward_prereq.reward_amount == 10
+        assert reward_prereq.consumes_reward == False
         
         # Check freeform prerequisite
         freeform_prereq = [p for p in item2.prerequisites if p.freeform_text][0]

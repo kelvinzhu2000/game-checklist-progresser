@@ -444,9 +444,11 @@ def batch_update(checklist_id):
                                         db.session.flush()
                                     
                                     consumes = prereq_info.get('consumes_reward', False)
+                                    reward_amount = prereq_info.get('reward_amount', 1)
                                     prereq = ItemPrerequisite(
                                         item_id=item.id,
                                         prerequisite_reward_id=reward.id,
+                                        reward_amount=reward_amount,
                                         consumes_reward=consumes
                                     )
                                     db.session.add(prereq)
@@ -531,9 +533,11 @@ def batch_update(checklist_id):
                                     db.session.flush()
                                 
                                 consumes = prereq_info.get('consumes_reward', False)
+                                reward_amount = prereq_info.get('reward_amount', 1)
                                 prereq = ItemPrerequisite(
                                     item_id=new_item.id,
                                     prerequisite_reward_id=reward.id,
+                                    reward_amount=reward_amount,
                                     consumes_reward=consumes
                                 )
                                 db.session.add(prereq)

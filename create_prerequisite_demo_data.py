@@ -136,6 +136,7 @@ def create_demo_data():
             prereq4 = ItemPrerequisite(
                 item_id=item4.id,
                 prerequisite_reward_id=reward1.id,
+                reward_amount=13,
                 consumes_reward=False  # Doesn't consume, but you need them
             )
             prereq5 = ItemPrerequisite(

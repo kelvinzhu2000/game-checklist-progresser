@@ -208,6 +208,7 @@ class ItemPrerequisite(db.Model):
     
     # Type 2: Prerequisite is a reward
     prerequisite_reward_id = db.Column(db.Integer, db.ForeignKey('rewards.id'), nullable=True)
+    reward_amount = db.Column(db.Integer, default=1, nullable=True)
     consumes_reward = db.Column(db.Boolean, default=False)
     
     # Type 3: Freeform text prerequisite
@@ -225,6 +226,6 @@ class ItemPrerequisite(db.Model):
         if self.prerequisite_item_id:
             return f'<ItemPrerequisite item_id={self.item_id} requires_item={self.prerequisite_item_id}>'
         elif self.prerequisite_reward_id:
-            return f'<ItemPrerequisite item_id={self.item_id} requires_reward={self.prerequisite_reward_id} consumes={self.consumes_reward}>'
+            return f'<ItemPrerequisite item_id={self.item_id} requires_reward={self.prerequisite_reward_id} amount={self.reward_amount} consumes={self.consumes_reward}>'
         else:
             return f'<ItemPrerequisite item_id={self.item_id} freeform="{self.freeform_text}">'

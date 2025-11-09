@@ -131,7 +131,7 @@
                                         </span>
                                     {% elif prereq.prerequisite_reward_id %}
                                         <span class="item-prerequisite-badge prereq-info">
-                                            🏆 {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                            🏆 {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
                                         </span>
                                     {% elif prereq.freeform_text %}
                                         <span class="item-prerequisite-badge prereq-info">
