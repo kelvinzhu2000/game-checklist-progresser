@@ -723,6 +723,39 @@ def toggle_progress(checklist_id, item_id):
                     # (since this item is now a prerequisite that is NOT met)
                     locked_items.append(dependent_item.id)
         
+        # Also check for items that depend on rewards from this item
+        # Get all reward IDs that this item provides
+        item_reward_ids = [ir.reward_id for ir in item.rewards]
+        
+        if item_reward_ids:
+            # Find all items in this checklist that have reward prerequisites for these rewards
+            all_items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+            
+            for check_item in all_items:
+                # Skip the item we just toggled
+                if check_item.id == item_id:
+                    continue
+                
+                # Check if this item has reward prerequisites for any of the rewards we provide
+                has_reward_prereq = False
+                for prereq in check_item.prerequisites:
+                    if prereq.prerequisite_reward_id in item_reward_ids:
+                        has_reward_prereq = True
+                        break
+                
+                if has_reward_prereq:
+                    # Check if this item's prerequisites are now met or not met
+                    are_met, unmet = check_item.are_prerequisites_met(user_checklist.id)
+                    
+                    # Check if this item is in our lists already
+                    if check_item.id not in unlocked_items and check_item.id not in locked_items:
+                        if are_met:
+                            # Prerequisites are met, so unlock (if not already)
+                            unlocked_items.append(check_item.id)
+                        else:
+                            # Prerequisites are not met, so lock
+                            locked_items.append(check_item.id)
+        
         return jsonify({
             'success': True, 
             'completed': progress.completed,
