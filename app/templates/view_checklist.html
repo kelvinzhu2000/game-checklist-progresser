@@ -90,12 +90,13 @@
                 {% set _ = reward_names.append(item_reward.reward.name) %}
                 {% set _ = reward_data.append(item_reward.reward.name ~ ':' ~ item_reward.amount|string) %}
             {% endfor %}
-            <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %}" 
+            <li class="item {% if user_copy and effective_progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %}" 
                 data-location="{{ item.location or '' }}"
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
                 data-reward-details="{{ ','.join(reward_data) }}"
-                data-completed="{{ 'true' if (user_copy and progress.get(item.id)) else 'false' }}"
+                data-completed="{{ 'true' if (user_copy and effective_progress.get(item.id)) else 'false' }}"
+                data-actual-completed="{{ 'true' if (user_copy and progress.get(item.id)) else 'false' }}"
                 data-item-id="{{ item.id }}">
                 <div class="item-content">
                     {% if user_copy %}
@@ -103,7 +104,7 @@
                                class="item-checkbox" 
                                data-checklist-id="{{ checklist.id }}" 
                                data-item-id="{{ item.id }}" 
-                               {% if progress.get(item.id) %}checked{% endif %}
+                               {% if effective_progress.get(item.id) %}checked{% endif %}
                                {% if item_locked.get(item.id) %}disabled{% endif %}
                                onchange="toggleItemProgress(this)">
                     {% endif %}
@@ -190,7 +191,8 @@ function toggleItemProgress(checkbox) {
     })
     .then(data => {
         if (data && data.success) {
-            // Update the item's completed state
+            // Update both actual and effective completed states
+            listItem.setAttribute('data-actual-completed', isChecked ? 'true' : 'false');
             listItem.setAttribute('data-completed', isChecked ? 'true' : 'false');
             
             // Update the completed class
@@ -667,10 +669,22 @@ function unlockItems(itemIds) {
         // Remove locked class
         item.classList.remove('locked');
         
-        // Enable the checkbox
+        // Enable the checkbox and restore its actual completion state
         const checkbox = item.querySelector('.item-checkbox');
         if (checkbox) {
             checkbox.disabled = false;
+            
+            // Restore the actual completion state from data-actual-completed
+            const actualCompleted = item.getAttribute('data-actual-completed') === 'true';
+            checkbox.checked = actualCompleted;
+            
+            // Update the effective completion state to match actual state (since it's now unlocked)
+            item.setAttribute('data-completed', actualCompleted ? 'true' : 'false');
+            if (actualCompleted) {
+                item.classList.add('completed');
+            } else {
+                item.classList.remove('completed');
+            }
         }
         
         // Update all prerequisite badges for this item to show they're met
@@ -698,13 +712,12 @@ function lockItems(itemIds) {
         const checkbox = item.querySelector('.item-checkbox');
         if (checkbox) {
             checkbox.disabled = true;
-            // If the item was checked, uncheck it since it's now locked
-            if (checkbox.checked) {
-                checkbox.checked = false;
-                // Update the item's completed state
-                item.setAttribute('data-completed', 'false');
-                item.classList.remove('completed');
-            }
+            // Uncheck the checkbox visually (it's locked)
+            // But the actual completion state in data-actual-completed remains unchanged
+            checkbox.checked = false;
+            // Update the effective completed state (not the actual state)
+            item.setAttribute('data-completed', 'false');
+            item.classList.remove('completed');
         }
         
         // Update all prerequisite badges for this item to show they're not met

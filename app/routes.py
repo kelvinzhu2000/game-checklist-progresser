@@ -257,6 +257,7 @@ def view(checklist_id):
     items = checklist.items.all()
     user_copy = None
     progress = {}
+    effective_progress = {}  # Track effective completion (considers prerequisites)
     item_locked = {}  # Track which items are locked due to prerequisites
     
     if current_user.is_authenticated:
@@ -271,14 +272,20 @@ def view(checklist_id):
                     user_checklist_id=user_copy.id,
                     item_id=item.id
                 ).first()
+                # Store the actual completion state from database
                 progress[item.id] = prog.completed if prog else False
                 
                 # Check if item is locked due to prerequisites
                 prereqs_met, unmet_prereqs = item.are_prerequisites_met(user_copy.id)
                 item_locked[item.id] = not prereqs_met
+                
+                # Effective completion: only true if actually completed AND prerequisites are met
+                # This ensures locked items don't count as completed for display/rewards
+                effective_progress[item.id] = progress[item.id] and prereqs_met
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
-                         user_copy=user_copy, progress=progress, item_locked=item_locked)
+                         user_copy=user_copy, progress=progress, effective_progress=effective_progress,
+                         item_locked=item_locked)
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required
