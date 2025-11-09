@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from app import create_app, db
-from app.models import User, Game, Checklist, ChecklistItem, Reward
+from app.models import User, Game, Checklist, ChecklistItem, Reward, ItemReward
 
 def create_demo_data():
     """Create demo data for reward system testing."""
@@ -171,10 +171,15 @@ def create_demo_data():
             db.session.add(item)
             db.session.flush()
             
-            # Add rewards to item
+            # Add rewards to item using ItemReward
             for reward_name in item_data.get('rewards', []):
                 if reward_name in rewards_dict:
-                    item.rewards.append(rewards_dict[reward_name])
+                    item_reward = ItemReward(
+                        checklist_item_id=item.id,
+                        reward_id=rewards_dict[reward_name].id,
+                        amount=1
+                    )
+                    db.session.add(item_reward)
         
         db.session.commit()
         print(f"✓ Created {len(items_data)} checklist items with rewards")

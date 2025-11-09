@@ -543,6 +543,11 @@ def toggle_progress(checklist_id, item_id):
     progress.completed_at = datetime.utcnow() if progress.completed else None
     db.session.commit()
     
+    # If AJAX request, return JSON response
+    if request.headers.get('Content-Type') == 'application/json' or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': True, 'completed': progress.completed})
+    
+    # Otherwise, redirect (for backwards compatibility)
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
 
 @checklist_bp.route('/<int:checklist_id>/categories', methods=['GET'])
