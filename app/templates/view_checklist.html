@@ -58,6 +58,14 @@
         </div>
     </div>
     {% endif %}
+    
+    <!-- Location Filter Legend (above category filter as requested) -->
+    <div id="location-legend" class="location-legend" style="display: none;">
+        <h3>Filter by Location</h3>
+        <div id="location-control-buttons" class="control-buttons"></div>
+        <div id="location-filters" class="location-filters"></div>
+    </div>
+    
     <!-- Category Filter Legend -->
     <div id="category-legend" class="category-legend" style="display: none;">
         <h3>Filter by Category</h3>
@@ -83,6 +91,7 @@
                 {% set _ = reward_data.append(item_reward.reward.name ~ ':' ~ item_reward.amount|string) %}
             {% endfor %}
             <li class="item {% if user_copy and progress.get(item.id) %}completed{% endif %}" 
+                data-location="{{ item.location or '' }}"
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
                 data-reward-details="{{ ','.join(reward_data) }}"
@@ -98,6 +107,9 @@
                                onchange="toggleItemProgress(this)">
                     {% endif %}
                     <div class="item-details">
+                        {% if item.location %}
+                            <span class="item-location-badge">📍 {{ item.location }}</span>
+                        {% endif %}
                         {% if item.category %}
                             <span class="item-category-badge">{{ item.category }}</span>
                         {% endif %}
@@ -170,8 +182,71 @@ function toggleItemProgress(checkbox) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Get all unique categories from items
+    // Get all unique locations from items
     const items = document.querySelectorAll('.item');
+    const locations = new Set();
+    let hasUnlocated = false;
+    
+    items.forEach(item => {
+        const location = item.getAttribute('data-location');
+        if (location && location.trim() !== '') {
+            locations.add(location);
+        } else {
+            hasUnlocated = true;
+        }
+    });
+    
+    // Only show location legend if there are locations or unlocated items
+    if (locations.size > 0 || hasUnlocated) {
+        const locationLegend = document.getElementById('location-legend');
+        const locationControlButtons = document.getElementById('location-control-buttons');
+        const locationFilters = document.getElementById('location-filters');
+        locationLegend.style.display = 'block';
+        
+        // Add "Select All" and "Deselect All" buttons to control buttons row
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.className = 'location-filter-btn control-btn';
+        selectAllBtn.textContent = 'Select All';
+        selectAllBtn.onclick = function() {
+            selectAllLocations();
+        };
+        locationControlButtons.appendChild(selectAllBtn);
+        
+        const deselectAllBtn = document.createElement('button');
+        deselectAllBtn.className = 'location-filter-btn control-btn';
+        deselectAllBtn.textContent = 'Deselect All';
+        deselectAllBtn.onclick = function() {
+            deselectAllLocations();
+        };
+        locationControlButtons.appendChild(deselectAllBtn);
+        
+        // Create filter buttons for each location
+        const sortedLocations = Array.from(locations).sort();
+        sortedLocations.forEach(location => {
+            const filterBtn = document.createElement('button');
+            filterBtn.className = 'location-filter-btn active';
+            filterBtn.textContent = location;
+            filterBtn.setAttribute('data-location', location);
+            filterBtn.onclick = function() {
+                toggleLocationFilter(this);
+            };
+            locationFilters.appendChild(filterBtn);
+        });
+        
+        // Add "Other" button for unlocated items
+        if (hasUnlocated) {
+            const otherBtn = document.createElement('button');
+            otherBtn.className = 'location-filter-btn active';
+            otherBtn.textContent = 'Other';
+            otherBtn.setAttribute('data-location', '');
+            otherBtn.onclick = function() {
+                toggleLocationFilter(this);
+            };
+            locationFilters.appendChild(otherBtn);
+        }
+    }
+    
+    // Get all unique categories from items
     const categories = new Set();
     let hasUncategorized = false;
     
@@ -302,6 +377,24 @@ document.addEventListener('DOMContentLoaded', function() {
     updateRewardTally();
 });
 
+function toggleLocationFilter(btn) {
+    const location = btn.getAttribute('data-location');
+    btn.classList.toggle('active');
+    applyFilters();
+}
+
+function selectAllLocations() {
+    const locationBtns = document.querySelectorAll('.location-filter-btn:not(.control-btn)');
+    locationBtns.forEach(btn => btn.classList.add('active'));
+    applyFilters();
+}
+
+function deselectAllLocations() {
+    const locationBtns = document.querySelectorAll('.location-filter-btn:not(.control-btn)');
+    locationBtns.forEach(btn => btn.classList.remove('active'));
+    applyFilters();
+}
+
 function toggleCategoryFilter(btn) {
     const category = btn.getAttribute('data-category');
     btn.classList.toggle('active');
@@ -340,8 +433,15 @@ function deselectAllRewards() {
 
 function applyFilters() {
     const items = document.querySelectorAll('.item');
+    const activeLocationBtns = document.querySelectorAll('.location-filter-btn.active:not(.control-btn)');
     const activeCategoryBtns = document.querySelectorAll('.category-filter-btn.active:not(.control-btn)');
     const activeRewardBtns = document.querySelectorAll('.reward-filter-btn.active:not(.control-btn)');
+    
+    // Get active locations
+    const activeLocations = new Set();
+    activeLocationBtns.forEach(btn => {
+        activeLocations.add(btn.getAttribute('data-location'));
+    });
     
     // Get active categories
     const activeCategories = new Set();
@@ -356,16 +456,24 @@ function applyFilters() {
     });
     
     // If no filters are active, hide all items
+    const hasActiveLocationFilters = activeLocationBtns.length > 0;
     const hasActiveCategoryFilters = activeCategoryBtns.length > 0;
     const hasActiveRewardFilters = activeRewardBtns.length > 0;
     
     items.forEach(item => {
+        const itemLocation = item.getAttribute('data-location');
         const itemCategory = item.getAttribute('data-category');
         const itemRewardsAttr = item.getAttribute('data-rewards');
         const itemRewards = itemRewardsAttr ? itemRewardsAttr.split(',').map(r => r.trim()).filter(r => r) : [];
         
+        let showByLocation = true;
         let showByCategory = true;
         let showByReward = true;
+        
+        // Check location filter
+        if (hasActiveLocationFilters) {
+            showByLocation = activeLocations.has(itemLocation);
+        }
         
         // Check category filter
         if (hasActiveCategoryFilters) {
@@ -383,8 +491,8 @@ function applyFilters() {
             }
         }
         
-        // Show item only if it passes both filters
-        if (showByCategory && showByReward) {
+        // Show item only if it passes all filters
+        if (showByLocation && showByCategory && showByReward) {
             item.style.display = '';
         } else {
             item.style.display = 'none';
@@ -477,6 +585,69 @@ function updateRewardTally() {
 </script>
 
 <style>
+.location-legend {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: #f0f8f0;
+    border-radius: 8px;
+    border: 1px solid #a8d5a8;
+}
+
+.location-legend h3 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.location-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.location-filter-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #27ae60;
+    background: white;
+    color: #27ae60;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.location-filter-btn:hover {
+    background: #d4edda;
+}
+
+.location-filter-btn.active {
+    background: #27ae60;
+    color: white;
+}
+
+.location-filter-btn.control-btn {
+    border-color: #2c3e50;
+    color: #2c3e50;
+    background: #ecf0f1;
+}
+
+.location-filter-btn.control-btn:hover {
+    background: #bdc3c7;
+}
+
+.item-location-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: #d4edda;
+    color: #155724;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    margin-right: 0.5rem;
+}
+
 .category-legend {
     margin: 1.5rem 0;
     padding: 1rem;

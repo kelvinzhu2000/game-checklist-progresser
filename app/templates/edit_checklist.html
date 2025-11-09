@@ -51,6 +51,7 @@
                     <div class="item-fields">
                         <input type="text" class="item-title-input" value="{{ item.title }}" placeholder="Item title">
                         <textarea class="item-description-input" placeholder="Item description (optional)">{{ item.description or '' }}</textarea>
+                        <input type="text" class="item-location-input" list="locations-list" value="{{ item.location or '' }}" placeholder="Location (optional)" autocomplete="off">
                         <input type="text" class="item-category-input" list="categories-list" value="{{ item.category or '' }}" placeholder="Category (optional)" autocomplete="off">
                         <div class="item-rewards-container">
                             <label class="rewards-label">Rewards:</label>
@@ -74,6 +75,7 @@
                 {% endfor %}
             </div>
             
+            <datalist id="locations-list"></datalist>
             <datalist id="categories-list"></datalist>
             <datalist id="rewards-list"></datalist>
             
@@ -115,6 +117,7 @@ function addNewItem() {
         <div class="item-fields">
             <input type="text" class="item-title-input" placeholder="Item title">
             <textarea class="item-description-input" placeholder="Item description (optional)"></textarea>
+            <input type="text" class="item-location-input" list="locations-list" placeholder="Location (optional)" autocomplete="off">
             <input type="text" class="item-category-input" list="categories-list" placeholder="Category (optional)" autocomplete="off">
             <div class="item-rewards-container">
                 <label class="rewards-label">Rewards:</label>
@@ -195,6 +198,7 @@ function collectItemsData() {
         const itemId = itemEl.getAttribute('data-item-id');
         const title = itemEl.querySelector('.item-title-input').value.trim();
         const description = itemEl.querySelector('.item-description-input').value.trim();
+        const location = itemEl.querySelector('.item-location-input').value.trim();
         const category = itemEl.querySelector('.item-category-input').value.trim();
         
         // Collect rewards with amounts
@@ -216,6 +220,7 @@ function collectItemsData() {
                 id: itemId.startsWith('new-') ? 'new' : parseInt(itemId),
                 title: title,
                 description: description,
+                location: location,
                 category: category,
                 rewards: rewards
             });
@@ -335,6 +340,21 @@ function getDragAfterElement(container, y) {
         }
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
+
+// Fetch locations for auto-complete
+fetch('{{ url_for("main.get_locations_for_game", game_id=checklist.game_id) }}')
+    .then(response => response.json())
+    .then(data => {
+        const datalist = document.getElementById('locations-list');
+        data.locations.forEach(location => {
+            const option = document.createElement('option');
+            option.value = location;
+            datalist.appendChild(option);
+        });
+    })
+    .catch(error => {
+        console.error('Error fetching locations:', error);
+    });
 
 // Fetch categories for auto-complete
 fetch('{{ url_for("main.get_categories_for_game", game_id=checklist.game_id) }}')
@@ -457,6 +477,14 @@ document.addEventListener('DOMContentLoaded', function() {
     resize: vertical;
 }
 
+.item-location-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
 .item-category-input {
     width: 100%;
     padding: 0.5rem;
@@ -553,6 +581,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .item-title-input:focus,
 .item-description-input:focus,
+.item-location-input:focus,
 .item-category-input:focus,
 .reward-input:focus,
 .reward-amount-input:focus {

@@ -33,6 +33,19 @@
         </div>
         
         <div class="form-group">
+            {{ form.location.label }}
+            {{ form.location(class="form-control", list="locations-list", autocomplete="off") }}
+            <datalist id="locations-list"></datalist>
+            {% if form.location.errors %}
+                <ul class="errors">
+                    {% for error in form.location.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
             {{ form.category.label }}
             {{ form.category(class="form-control", list="categories-list", autocomplete="off") }}
             <datalist id="categories-list"></datalist>
@@ -53,8 +66,22 @@
 </div>
 
 <script>
-// Fetch categories for auto-complete based on the checklist's game
+// Fetch locations and categories for auto-complete based on the checklist's game
 document.addEventListener('DOMContentLoaded', function() {
+    fetch('{{ url_for("main.get_locations_for_game", game_id=checklist.game_id) }}')
+        .then(response => response.json())
+        .then(data => {
+            const datalist = document.getElementById('locations-list');
+            data.locations.forEach(location => {
+                const option = document.createElement('option');
+                option.value = location;
+                datalist.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching locations:', error);
+        });
+    
     fetch('{{ url_for("main.get_categories_for_game", game_id=checklist.game_id) }}')
         .then(response => response.json())
         .then(data => {

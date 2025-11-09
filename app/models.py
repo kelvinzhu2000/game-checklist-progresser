@@ -75,6 +75,7 @@ class ChecklistItem(db.Model):
     checklist_id = db.Column(db.Integer, db.ForeignKey('checklists.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
+    location = db.Column(db.String(100))
     category = db.Column(db.String(100))
     order = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
