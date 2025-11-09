@@ -86,12 +86,16 @@
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
                 data-reward-details="{{ ','.join(reward_data) }}"
-                data-completed="{{ 'true' if (user_copy and progress.get(item.id)) else 'false' }}">
+                data-completed="{{ 'true' if (user_copy and progress.get(item.id)) else 'false' }}"
+                data-item-id="{{ item.id }}">
                 <div class="item-content">
                     {% if user_copy %}
-                        <form method="POST" action="{{ url_for('checklist.toggle_progress', checklist_id=checklist.id, item_id=item.id) }}" class="checkbox-form">
-                            <input type="checkbox" {% if progress.get(item.id) %}checked{% endif %} onchange="this.form.submit()">
-                        </form>
+                        <input type="checkbox" 
+                               class="item-checkbox" 
+                               data-checklist-id="{{ checklist.id }}" 
+                               data-item-id="{{ item.id }}" 
+                               {% if progress.get(item.id) %}checked{% endif %} 
+                               onchange="toggleItemProgress(this)">
                     {% endif %}
                     <div class="item-details">
                         {% if item.category %}
@@ -120,6 +124,51 @@
 </div>
 
 <script>
+// Toggle item progress via AJAX to avoid page reload
+function toggleItemProgress(checkbox) {
+    const checklistId = checkbox.getAttribute('data-checklist-id');
+    const itemId = checkbox.getAttribute('data-item-id');
+    const isChecked = checkbox.checked;
+    
+    // Find the parent list item
+    const listItem = checkbox.closest('.item');
+    
+    // Send AJAX request
+    fetch(`/checklist/${checklistId}/progress/${itemId}/toggle`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            // If request failed, revert checkbox state
+            checkbox.checked = !isChecked;
+            alert('Failed to update progress. Please try again.');
+            return;
+        }
+        
+        // Update the item's completed state
+        listItem.setAttribute('data-completed', isChecked ? 'true' : 'false');
+        
+        // Update the completed class
+        if (isChecked) {
+            listItem.classList.add('completed');
+        } else {
+            listItem.classList.remove('completed');
+        }
+        
+        // Update the reward tally
+        updateRewardTally();
+    })
+    .catch(error => {
+        console.error('Error toggling progress:', error);
+        // Revert checkbox state on error
+        checkbox.checked = !isChecked;
+        alert('Failed to update progress. Please try again.');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Get all unique categories from items
     const items = document.querySelectorAll('.item');
