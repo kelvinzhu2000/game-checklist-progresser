@@ -82,6 +82,49 @@ class ChecklistItem(db.Model):
     
     # Relationships
     rewards = db.relationship('ItemReward', cascade='all, delete-orphan')
+    prerequisites = db.relationship('ItemPrerequisite', 
+                                   foreign_keys='ItemPrerequisite.item_id',
+                                   cascade='all, delete-orphan')
+    
+    def are_prerequisites_met(self, user_checklist_id=None):
+        """Check if all prerequisites are met for this item.
+        
+        Args:
+            user_checklist_id: Optional user_checklist_id to check item completion status
+            
+        Returns:
+            tuple: (bool, list) - (are_met, list_of_unmet_prerequisites)
+        """
+        unmet = []
+        
+        for prereq in self.prerequisites:
+            # Type 1: Prerequisite checklist item
+            if prereq.prerequisite_item_id:
+                if user_checklist_id:
+                    # Check if the prerequisite item is completed
+                    progress = UserProgress.query.filter_by(
+                        user_checklist_id=user_checklist_id,
+                        item_id=prereq.prerequisite_item_id
+                    ).first()
+                    if not progress or not progress.completed:
+                        unmet.append(prereq)
+                else:
+                    # Can't verify completion without user_checklist_id
+                    unmet.append(prereq)
+            
+            # Type 2: Prerequisite reward (consumes_reward is informational only)
+            # Freeform rewards are informational - we can't check if they're "met"
+            # They're just displayed to the user
+            elif prereq.prerequisite_reward_id:
+                # Reward prerequisites are informational, don't block completion
+                pass
+            
+            # Type 3: Freeform text (informational only)
+            elif prereq.freeform_text:
+                # Freeform prerequisites are informational, don't block completion
+                pass
+        
+        return (len(unmet) == 0, unmet)
     
     def __repr__(self):
         return f'<ChecklistItem {self.title}>'
@@ -146,3 +189,43 @@ class ItemReward(db.Model):
     
     def __repr__(self):
         return f'<ItemReward item_id={self.checklist_item_id} reward_id={self.reward_id} amount={self.amount}>'
+
+class ItemPrerequisite(db.Model):
+    """Prerequisites for checklist items.
+    
+    Supports three types of prerequisites:
+    1. Other checklist items (prerequisite_item_id)
+    2. Rewards (prerequisite_reward_id with consumes_reward flag)
+    3. Freeform text (freeform_text)
+    """
+    __tablename__ = 'item_prerequisites'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), nullable=False)
+    
+    # Type 1: Prerequisite is another checklist item
+    prerequisite_item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), nullable=True)
+    
+    # Type 2: Prerequisite is a reward
+    prerequisite_reward_id = db.Column(db.Integer, db.ForeignKey('rewards.id'), nullable=True)
+    reward_amount = db.Column(db.Integer, default=1, nullable=True)
+    consumes_reward = db.Column(db.Boolean, default=False)
+    
+    # Type 3: Freeform text prerequisite
+    freeform_text = db.Column(db.String(200), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    prerequisite_item = db.relationship('ChecklistItem', 
+                                       foreign_keys=[prerequisite_item_id],
+                                       backref='dependent_items')
+    prerequisite_reward = db.relationship('Reward')
+    
+    def __repr__(self):
+        if self.prerequisite_item_id:
+            return f'<ItemPrerequisite item_id={self.item_id} requires_item={self.prerequisite_item_id}>'
+        elif self.prerequisite_reward_id:
+            return f'<ItemPrerequisite item_id={self.item_id} requires_reward={self.prerequisite_reward_id} amount={self.reward_amount} consumes={self.consumes_reward}>'
+        else:
+            return f'<ItemPrerequisite item_id={self.item_id} freeform="{self.freeform_text}">'

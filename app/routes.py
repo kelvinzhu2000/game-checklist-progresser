@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app import db
-from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward, ItemReward
+from app.models import User, Game, Checklist, ChecklistItem, UserChecklist, UserProgress, Reward, ItemReward, ItemPrerequisite
 from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemForm, GameForm, ChecklistEditForm
 from app.ai_service import generate_checklist_items
 from datetime import datetime
@@ -257,6 +257,7 @@ def view(checklist_id):
     items = checklist.items.all()
     user_copy = None
     progress = {}
+    item_locked = {}  # Track which items are locked due to prerequisites
     
     if current_user.is_authenticated:
         user_copy = UserChecklist.query.filter_by(
@@ -271,9 +272,13 @@ def view(checklist_id):
                     item_id=item.id
                 ).first()
                 progress[item.id] = prog.completed if prog else False
+                
+                # Check if item is locked due to prerequisites
+                prereqs_met, unmet_prereqs = item.are_prerequisites_met(user_copy.id)
+                item_locked[item.id] = not prereqs_met
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
-                         user_copy=user_copy, progress=progress)
+                         user_copy=user_copy, progress=progress, item_locked=item_locked)
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -407,6 +412,57 @@ def batch_update(checklist_id):
                                 )
                                 db.session.add(item_reward)
                     
+                    # Handle prerequisites
+                    prereq_data = item_data.get('prerequisites', [])
+                    if prereq_data is not None:
+                        # Clear existing prerequisites
+                        ItemPrerequisite.query.filter_by(item_id=item.id).delete()
+                        
+                        # Add new prerequisites
+                        for prereq_info in prereq_data:
+                            prereq_type = prereq_info.get('type')
+                            
+                            if prereq_type == 'item':
+                                # Prerequisite is another checklist item
+                                prereq_item_id = prereq_info.get('prerequisite_item_id')
+                                if prereq_item_id:
+                                    prereq = ItemPrerequisite(
+                                        item_id=item.id,
+                                        prerequisite_item_id=prereq_item_id
+                                    )
+                                    db.session.add(prereq)
+                            
+                            elif prereq_type == 'reward':
+                                # Prerequisite is a reward
+                                reward_name = prereq_info.get('reward_name', '').strip()
+                                if reward_name:
+                                    # Get or create reward
+                                    reward = Reward.query.filter_by(name=reward_name).first()
+                                    if not reward:
+                                        reward = Reward(name=reward_name)
+                                        db.session.add(reward)
+                                        db.session.flush()
+                                    
+                                    consumes = prereq_info.get('consumes_reward', False)
+                                    reward_amount = prereq_info.get('reward_amount', 1)
+                                    prereq = ItemPrerequisite(
+                                        item_id=item.id,
+                                        prerequisite_reward_id=reward.id,
+                                        reward_amount=reward_amount,
+                                        consumes_reward=consumes
+                                    )
+                                    db.session.add(prereq)
+                            
+                            elif prereq_type == 'freeform':
+                                # Freeform text prerequisite
+                                freeform_text = prereq_info.get('freeform_text', '').strip()
+                                if freeform_text:
+                                    prereq = ItemPrerequisite(
+                                        item_id=item.id,
+                                        freeform_text=freeform_text
+                                    )
+                                    db.session.add(prereq)
+                    
                     existing_item_ids.add(item_id)
             else:
                 # Create new item
@@ -448,6 +504,53 @@ def batch_update(checklist_id):
                                 amount=reward_amount
                             )
                             db.session.add(item_reward)
+                
+                # Handle prerequisites for new item
+                prereq_data = item_data.get('prerequisites', [])
+                if prereq_data:
+                    for prereq_info in prereq_data:
+                        prereq_type = prereq_info.get('type')
+                        
+                        if prereq_type == 'item':
+                            # Prerequisite is another checklist item
+                            prereq_item_id = prereq_info.get('prerequisite_item_id')
+                            if prereq_item_id:
+                                prereq = ItemPrerequisite(
+                                    item_id=new_item.id,
+                                    prerequisite_item_id=prereq_item_id
+                                )
+                                db.session.add(prereq)
+                        
+                        elif prereq_type == 'reward':
+                            # Prerequisite is a reward
+                            reward_name = prereq_info.get('reward_name', '').strip()
+                            if reward_name:
+                                # Get or create reward
+                                reward = Reward.query.filter_by(name=reward_name).first()
+                                if not reward:
+                                    reward = Reward(name=reward_name)
+                                    db.session.add(reward)
+                                    db.session.flush()
+                                
+                                consumes = prereq_info.get('consumes_reward', False)
+                                reward_amount = prereq_info.get('reward_amount', 1)
+                                prereq = ItemPrerequisite(
+                                    item_id=new_item.id,
+                                    prerequisite_reward_id=reward.id,
+                                    reward_amount=reward_amount,
+                                    consumes_reward=consumes
+                                )
+                                db.session.add(prereq)
+                        
+                        elif prereq_type == 'freeform':
+                            # Freeform text prerequisite
+                            freeform_text = prereq_info.get('freeform_text', '').strip()
+                            if freeform_text:
+                                prereq = ItemPrerequisite(
+                                    item_id=new_item.id,
+                                    freeform_text=freeform_text
+                                )
+                                db.session.add(prereq)
         
         # Delete items that were removed
         deleted_ids = data.get('deleted_items', [])
@@ -541,6 +644,24 @@ def toggle_progress(checklist_id, item_id):
         user_checklist_id=user_checklist.id,
         item_id=item_id
     ).first_or_404()
+    
+    # Get the item to check prerequisites
+    item = ChecklistItem.query.get_or_404(item_id)
+    
+    # If trying to mark as complete, check prerequisites
+    if not progress.completed:
+        prereqs_met, unmet_prereqs = item.are_prerequisites_met(user_checklist.id)
+        if not prereqs_met:
+            # Return error if prerequisites are not met
+            if request.headers.get('Content-Type') == 'application/json' or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({
+                    'success': False, 
+                    'error': 'Prerequisites not met',
+                    'completed': False
+                }), 400
+            else:
+                flash('Cannot complete this item - prerequisites not met!', 'error')
+                return redirect(url_for('checklist.view', checklist_id=checklist_id))
     
     progress.completed = not progress.completed
     progress.completed_at = datetime.utcnow() if progress.completed else None
