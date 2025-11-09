@@ -38,6 +38,7 @@ class ChecklistForm(FlaskForm):
 class ChecklistItemForm(FlaskForm):
     title = StringField('Item Title', validators=[DataRequired(), Length(max=200)])
     description = TextAreaField('Description')
+    location = StringField('Location', validators=[Length(max=100)])
     category = StringField('Category', validators=[Length(max=100)])
     submit = SubmitField('Add Item')
 

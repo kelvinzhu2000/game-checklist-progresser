@@ -371,6 +371,7 @@ def batch_update(checklist_id):
                 if item and item.checklist_id == checklist_id:
                     item.title = item_data.get('title', item.title)
                     item.description = item_data.get('description', item.description)
+                    item.location = item_data.get('location', item.location)
                     item.category = item_data.get('category', item.category)
                     item.order = idx + 1
                     
@@ -413,6 +414,7 @@ def batch_update(checklist_id):
                     checklist_id=checklist_id,
                     title=item_data.get('title', ''),
                     description=item_data.get('description', ''),
+                    location=item_data.get('location', ''),
                     category=item_data.get('category', ''),
                     order=idx + 1
                 )
@@ -482,6 +484,7 @@ def add_item(checklist_id):
             checklist_id=checklist_id,
             title=form.title.data,
             description=form.description.data,
+            location=form.location.data,
             category=form.category.data,
             order=max_order + 1
         )
@@ -566,6 +569,23 @@ def get_categories(checklist_id):
     
     category_list = [cat[0] for cat in categories]
     return jsonify({'categories': category_list})
+
+@checklist_bp.route('/<int:checklist_id>/locations', methods=['GET'])
+def get_locations(checklist_id):
+    """Get unique locations for a checklist."""
+    checklist = Checklist.query.get_or_404(checklist_id)
+    
+    if not checklist.is_public and (not current_user.is_authenticated or checklist.creator_id != current_user.id):
+        abort(403)
+    
+    locations = db.session.query(ChecklistItem.location).filter(
+        ChecklistItem.checklist_id == checklist_id,
+        ChecklistItem.location.isnot(None),
+        ChecklistItem.location != ''
+    ).distinct().all()
+    
+    location_list = [loc[0] for loc in locations]
+    return jsonify({'locations': location_list})
 
 @checklist_bp.route('/<int:checklist_id>/rewards', methods=['GET'])
 def get_rewards(checklist_id):
@@ -682,3 +702,23 @@ def get_categories_for_game(game_id):
     
     category_list = [cat[0] for cat in categories]
     return jsonify({'categories': category_list})
+
+@main_bp.route('/api/locations/<int:game_id>')
+def get_locations_for_game(game_id):
+    """Get unique locations for a specific game."""
+    # Get all checklists for this game
+    checklists = Checklist.query.filter_by(game_id=game_id).all()
+    checklist_ids = [c.id for c in checklists]
+    
+    if not checklist_ids:
+        return jsonify({'locations': []})
+    
+    # Get unique locations from all items in these checklists
+    locations = db.session.query(ChecklistItem.location).filter(
+        ChecklistItem.checklist_id.in_(checklist_ids),
+        ChecklistItem.location.isnot(None),
+        ChecklistItem.location != ''
+    ).distinct().all()
+    
+    location_list = [loc[0] for loc in locations]
+    return jsonify({'locations': location_list})
