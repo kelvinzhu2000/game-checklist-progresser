@@ -445,11 +445,15 @@ def batch_update(checklist_id):
                                     
                                     consumes = prereq_info.get('consumes_reward', False)
                                     reward_amount = prereq_info.get('reward_amount', 1)
+                                    reward_location = prereq_info.get('reward_location', '').strip() or None
+                                    reward_category = prereq_info.get('reward_category', '').strip() or None
                                     prereq = ItemPrerequisite(
                                         item_id=item.id,
                                         prerequisite_reward_id=reward.id,
                                         reward_amount=reward_amount,
-                                        consumes_reward=consumes
+                                        consumes_reward=consumes,
+                                        reward_location=reward_location,
+                                        reward_category=reward_category
                                     )
                                     db.session.add(prereq)
                             
@@ -534,11 +538,15 @@ def batch_update(checklist_id):
                                 
                                 consumes = prereq_info.get('consumes_reward', False)
                                 reward_amount = prereq_info.get('reward_amount', 1)
+                                reward_location = prereq_info.get('reward_location', '').strip() or None
+                                reward_category = prereq_info.get('reward_category', '').strip() or None
                                 prereq = ItemPrerequisite(
                                     item_id=new_item.id,
                                     prerequisite_reward_id=reward.id,
                                     reward_amount=reward_amount,
-                                    consumes_reward=consumes
+                                    consumes_reward=consumes,
+                                    reward_location=reward_location,
+                                    reward_category=reward_category
                                 )
                                 db.session.add(prereq)
                         

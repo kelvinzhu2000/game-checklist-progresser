@@ -79,8 +79,8 @@
                                     <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
                                 </span>
                                 {% elif prereq.prerequisite_reward_id %}
-                                <span class="prerequisite-tag" data-prereq-type="reward" data-prereq-reward-name="{{ prereq.prerequisite_reward.name }}" data-reward-amount="{{ prereq.reward_amount or 1 }}" data-consumes="{{ prereq.consumes_reward }}">
-                                    🏆 Reward: {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                <span class="prerequisite-tag" data-prereq-type="reward" data-prereq-reward-name="{{ prereq.prerequisite_reward.name }}" data-reward-amount="{{ prereq.reward_amount or 1 }}" data-consumes="{{ prereq.consumes_reward }}" data-reward-location="{{ prereq.reward_location or '' }}" data-reward-category="{{ prereq.reward_category or '' }}">
+                                    🏆 Reward: {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}{% if prereq.reward_location %} from {{ prereq.reward_location }}{% endif %}{% if prereq.reward_category %} ({{ prereq.reward_category }}){% endif %}
                                     <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
                                 </span>
                                 {% elif prereq.freeform_text %}
@@ -105,6 +105,16 @@
                                     <input type="checkbox" class="prerequisite-consumes-checkbox">
                                     Consumes
                                 </label>
+                                <label class="location-checkbox-label" style="display: none;">
+                                    <input type="checkbox" class="prerequisite-location-checkbox">
+                                    from location
+                                </label>
+                                <input type="text" class="prerequisite-reward-location-input" list="locations-list" placeholder="Location..." style="display: none;" autocomplete="off">
+                                <label class="category-checkbox-label" style="display: none;">
+                                    <input type="checkbox" class="prerequisite-category-checkbox">
+                                    from category
+                                </label>
+                                <input type="text" class="prerequisite-reward-category-input" list="categories-list" placeholder="Category..." style="display: none;" autocomplete="off">
                                 <button type="button" class="btn-add-prerequisite" onclick="addPrerequisite(this)">+</button>
                             </div>
                         </div>
@@ -184,6 +194,16 @@ function addNewItem() {
                         <input type="checkbox" class="prerequisite-consumes-checkbox">
                         Consumes
                     </label>
+                    <label class="location-checkbox-label" style="display: none;">
+                        <input type="checkbox" class="prerequisite-location-checkbox">
+                        from location
+                    </label>
+                    <input type="text" class="prerequisite-reward-location-input" list="locations-list" placeholder="Location..." style="display: none;" autocomplete="off">
+                    <label class="category-checkbox-label" style="display: none;">
+                        <input type="checkbox" class="prerequisite-category-checkbox">
+                        from category
+                    </label>
+                    <input type="text" class="prerequisite-reward-category-input" list="categories-list" placeholder="Category..." style="display: none;" autocomplete="off">
                     <button type="button" class="btn-add-prerequisite" onclick="addPrerequisite(this)">+</button>
                 </div>
             </div>
@@ -275,6 +295,12 @@ function addPrerequisite(button) {
         const rewardAmount = parseInt(rewardAmountInput.value) || 1;
         const consumesCheckbox = container.querySelector('.prerequisite-consumes-checkbox');
         const consumes = consumesCheckbox.checked;
+        const locationCheckbox = container.querySelector('.prerequisite-location-checkbox');
+        const locationInput = container.querySelector('.prerequisite-reward-location-input');
+        const rewardLocation = locationCheckbox.checked ? locationInput.value.trim() : '';
+        const categoryCheckbox = container.querySelector('.prerequisite-category-checkbox');
+        const categoryInput = container.querySelector('.prerequisite-reward-category-input');
+        const rewardCategory = categoryCheckbox.checked ? categoryInput.value.trim() : '';
         
         if (!rewardName) {
             alert('Please enter a reward name');
@@ -284,7 +310,9 @@ function addPrerequisite(button) {
             type: 'reward',
             rewardName: rewardName,
             rewardAmount: rewardAmount,
-            consumes: consumes
+            consumes: consumes,
+            rewardLocation: rewardLocation,
+            rewardCategory: rewardCategory
         };
     } else if (type === 'freeform') {
         const freeformInput = container.querySelector('.prerequisite-input');
@@ -316,8 +344,17 @@ function addPrerequisite(button) {
         prereqTag.setAttribute('data-prereq-reward-name', prereqData.rewardName);
         prereqTag.setAttribute('data-reward-amount', prereqData.rewardAmount);
         prereqTag.setAttribute('data-consumes', prereqData.consumes);
+        prereqTag.setAttribute('data-reward-location', prereqData.rewardLocation || '');
+        prereqTag.setAttribute('data-reward-category', prereqData.rewardCategory || '');
+        let displayText = `🏆 Reward: ${prereqData.rewardAmount}x ${prereqData.rewardName}${prereqData.consumes ? ' (consumes)' : ''}`;
+        if (prereqData.rewardLocation) {
+            displayText += ` from ${prereqData.rewardLocation}`;
+        }
+        if (prereqData.rewardCategory) {
+            displayText += ` (${prereqData.rewardCategory})`;
+        }
         prereqTag.innerHTML = `
-            🏆 Reward: ${prereqData.rewardAmount}x ${prereqData.rewardName}${prereqData.consumes ? ' (consumes)' : ''}
+            ${displayText}
             <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
         `;
     } else if (prereqData.type === 'freeform') {
@@ -335,6 +372,10 @@ function addPrerequisite(button) {
     container.querySelector('.prerequisite-reward-input').value = '';
     container.querySelector('.prerequisite-reward-amount-input').value = '1';
     container.querySelector('.prerequisite-consumes-checkbox').checked = false;
+    container.querySelector('.prerequisite-location-checkbox').checked = false;
+    container.querySelector('.prerequisite-reward-location-input').value = '';
+    container.querySelector('.prerequisite-category-checkbox').checked = false;
+    container.querySelector('.prerequisite-reward-category-input').value = '';
     if (container.querySelector('.prerequisite-item-select')) {
         container.querySelector('.prerequisite-item-select').selectedIndex = 0;
     }
@@ -354,6 +395,10 @@ function updatePrerequisiteInputs(container) {
     container.querySelector('.prerequisite-reward-input').style.display = 'none';
     container.querySelector('.prerequisite-reward-amount-input').style.display = 'none';
     container.querySelector('.consumes-checkbox-label').style.display = 'none';
+    container.querySelector('.location-checkbox-label').style.display = 'none';
+    container.querySelector('.prerequisite-reward-location-input').style.display = 'none';
+    container.querySelector('.category-checkbox-label').style.display = 'none';
+    container.querySelector('.prerequisite-reward-category-input').style.display = 'none';
     
     // Show relevant input based on type
     if (type === 'item') {
@@ -363,6 +408,8 @@ function updatePrerequisiteInputs(container) {
         container.querySelector('.prerequisite-reward-input').style.display = 'inline-block';
         container.querySelector('.prerequisite-reward-amount-input').style.display = 'inline-block';
         container.querySelector('.consumes-checkbox-label').style.display = 'inline-block';
+        container.querySelector('.location-checkbox-label').style.display = 'inline-block';
+        container.querySelector('.category-checkbox-label').style.display = 'inline-block';
         container.querySelector('.prerequisite-input').disabled = true;
     } else if (type === 'freeform') {
         container.querySelector('.prerequisite-input').style.display = 'inline-block';
@@ -415,13 +462,22 @@ function collectItemsData() {
                 const rewardName = tag.getAttribute('data-prereq-reward-name');
                 const rewardAmount = parseInt(tag.getAttribute('data-reward-amount')) || 1;
                 const consumes = tag.getAttribute('data-consumes') === 'true';
+                const rewardLocation = tag.getAttribute('data-reward-location') || '';
+                const rewardCategory = tag.getAttribute('data-reward-category') || '';
                 if (rewardName) {
-                    prerequisites.push({
+                    const prereq = {
                         type: 'reward',
                         reward_name: rewardName,
                         reward_amount: rewardAmount,
                         consumes_reward: consumes
-                    });
+                    };
+                    if (rewardLocation) {
+                        prereq.reward_location = rewardLocation;
+                    }
+                    if (rewardCategory) {
+                        prereq.reward_category = rewardCategory;
+                    }
+                    prerequisites.push(prereq);
                 }
             } else if (prereqType === 'freeform') {
                 const freeformText = tag.getAttribute('data-freeform-text');
@@ -627,6 +683,24 @@ document.addEventListener('DOMContentLoaded', function() {
             // Initial update
             updatePrerequisiteInputs(container);
             populateItemSelect(container);
+        }
+        
+        // Add event listener for location checkbox
+        const locationCheckbox = container.querySelector('.prerequisite-location-checkbox');
+        const locationInput = container.querySelector('.prerequisite-reward-location-input');
+        if (locationCheckbox && locationInput) {
+            locationCheckbox.addEventListener('change', function() {
+                locationInput.style.display = locationCheckbox.checked ? 'inline-block' : 'none';
+            });
+        }
+        
+        // Add event listener for category checkbox
+        const categoryCheckbox = container.querySelector('.prerequisite-category-checkbox');
+        const categoryInput = container.querySelector('.prerequisite-reward-category-input');
+        if (categoryCheckbox && categoryInput) {
+            categoryCheckbox.addEventListener('change', function() {
+                categoryInput.style.display = categoryCheckbox.checked ? 'inline-block' : 'none';
+            });
         }
     }
     
@@ -998,6 +1072,29 @@ function populateItemSelect(container) {
 
 .prerequisite-consumes-checkbox {
     cursor: pointer;
+}
+
+.location-checkbox-label,
+.category-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.prerequisite-location-checkbox,
+.prerequisite-category-checkbox {
+    cursor: pointer;
+}
+
+.prerequisite-reward-location-input,
+.prerequisite-reward-category-input {
+    padding: 0.4rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    min-width: 120px;
 }
 
 .btn-add-prerequisite {
