@@ -669,26 +669,35 @@ def toggle_progress(checklist_id, item_id):
     
     # If AJAX request, return JSON response with updated lock status
     if request.headers.get('Content-Type') == 'application/json' or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Check which items might have been unlocked by this change
+        # Check which items might have been unlocked or locked by this change
         unlocked_items = []
-        if progress.completed:
-            # Find all items that have this item as a prerequisite
-            dependent_prereqs = ItemPrerequisite.query.filter_by(
-                prerequisite_item_id=item_id
-            ).all()
-            
-            for prereq in dependent_prereqs:
-                dependent_item = ChecklistItem.query.get(prereq.item_id)
-                if dependent_item and dependent_item.checklist_id == checklist_id:
-                    # Check if this item's prerequisites are now met
-                    are_met, unmet = dependent_item.are_prerequisites_met(user_checklist.id)
+        locked_items = []
+        
+        # Find all items that have this item as a prerequisite
+        dependent_prereqs = ItemPrerequisite.query.filter_by(
+            prerequisite_item_id=item_id
+        ).all()
+        
+        for prereq in dependent_prereqs:
+            dependent_item = ChecklistItem.query.get(prereq.item_id)
+            if dependent_item and dependent_item.checklist_id == checklist_id:
+                # Check if this item's prerequisites are now met
+                are_met, unmet = dependent_item.are_prerequisites_met(user_checklist.id)
+                
+                if progress.completed:
+                    # Item was just completed - check if dependent items can be unlocked
                     if are_met:
                         unlocked_items.append(dependent_item.id)
+                else:
+                    # Item was just unchecked - dependent items should be locked
+                    # (since this item is now a prerequisite that is NOT met)
+                    locked_items.append(dependent_item.id)
         
         return jsonify({
             'success': True, 
             'completed': progress.completed,
-            'unlocked_items': unlocked_items
+            'unlocked_items': unlocked_items,
+            'locked_items': locked_items
         })
     
     # Otherwise, redirect (for backwards compatibility)
