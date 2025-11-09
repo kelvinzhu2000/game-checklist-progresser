@@ -667,9 +667,29 @@ def toggle_progress(checklist_id, item_id):
     progress.completed_at = datetime.utcnow() if progress.completed else None
     db.session.commit()
     
-    # If AJAX request, return JSON response
+    # If AJAX request, return JSON response with updated lock status
     if request.headers.get('Content-Type') == 'application/json' or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'success': True, 'completed': progress.completed})
+        # Check which items might have been unlocked by this change
+        unlocked_items = []
+        if progress.completed:
+            # Find all items that have this item as a prerequisite
+            dependent_prereqs = ItemPrerequisite.query.filter_by(
+                prerequisite_item_id=item_id
+            ).all()
+            
+            for prereq in dependent_prereqs:
+                dependent_item = ChecklistItem.query.get(prereq.item_id)
+                if dependent_item and dependent_item.checklist_id == checklist_id:
+                    # Check if this item's prerequisites are now met
+                    are_met, unmet = dependent_item.are_prerequisites_met(user_checklist.id)
+                    if are_met:
+                        unlocked_items.append(dependent_item.id)
+        
+        return jsonify({
+            'success': True, 
+            'completed': progress.completed,
+            'unlocked_items': unlocked_items
+        })
     
     # Otherwise, redirect (for backwards compatibility)
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
