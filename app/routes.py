@@ -259,6 +259,7 @@ def view(checklist_id):
     progress = {}
     effective_progress = {}  # Track effective completion (considers prerequisites)
     item_locked = {}  # Track which items are locked due to prerequisites
+    reward_tallies = {}  # Track reward tallies for checking prerequisites
     
     if current_user.is_authenticated:
         user_copy = UserChecklist.query.filter_by(
@@ -267,6 +268,20 @@ def view(checklist_id):
         ).first()
         
         if user_copy:
+            # Calculate all reward tallies for prerequisite checking
+            # We need to calculate for each unique combination of reward, location, and category
+            for item in items:
+                for prereq in item.prerequisites:
+                    if prereq.prerequisite_reward_id:
+                        # Create a key for this specific reward with filters
+                        key = (prereq.prerequisite_reward_id, prereq.reward_location, prereq.reward_category)
+                        if key not in reward_tallies:
+                            reward_tallies[key] = user_copy.get_reward_tally(
+                                reward_id=prereq.prerequisite_reward_id,
+                                location=prereq.reward_location,
+                                category=prereq.reward_category
+                            )
+            
             for item in items:
                 prog = UserProgress.query.filter_by(
                     user_checklist_id=user_copy.id,
@@ -285,7 +300,7 @@ def view(checklist_id):
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
                          user_copy=user_copy, progress=progress, effective_progress=effective_progress,
-                         item_locked=item_locked)
+                         item_locked=item_locked, reward_tallies=reward_tallies)
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required

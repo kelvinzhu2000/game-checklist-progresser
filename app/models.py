@@ -112,12 +112,29 @@ class ChecklistItem(db.Model):
                     # Can't verify completion without user_checklist_id
                     unmet.append(prereq)
             
-            # Type 2: Prerequisite reward (consumes_reward is informational only)
-            # Freeform rewards are informational - we can't check if they're "met"
-            # They're just displayed to the user
+            # Type 2: Prerequisite reward - check if user has collected enough
             elif prereq.prerequisite_reward_id:
-                # Reward prerequisites are informational, don't block completion
-                pass
+                if user_checklist_id:
+                    # Get the user checklist to calculate reward tally
+                    user_checklist = db.session.get(UserChecklist, user_checklist_id)
+                    if user_checklist:
+                        # Calculate the reward tally with filters
+                        collected = user_checklist.get_reward_tally(
+                            reward_id=prereq.prerequisite_reward_id,
+                            location=prereq.reward_location,
+                            category=prereq.reward_category
+                        )
+                        required = prereq.reward_amount or 1
+                        
+                        # Check if user has collected enough of this reward
+                        if collected < required:
+                            unmet.append(prereq)
+                    else:
+                        # Can't verify without user_checklist
+                        unmet.append(prereq)
+                else:
+                    # Can't verify completion without user_checklist_id
+                    unmet.append(prereq)
             
             # Type 3: Freeform text (informational only)
             elif prereq.freeform_text:
@@ -147,6 +164,58 @@ class UserChecklist(db.Model):
             return 0
         completed_items = self.progress_items.filter_by(completed=True).count()
         return int((completed_items / total_items) * 100)
+    
+    def get_reward_tally(self, reward_id=None, location=None, category=None):
+        """Calculate the total amount of a specific reward collected from completed items.
+        
+        Args:
+            reward_id: The reward ID to tally. If None, returns a dict of all rewards.
+            location: Optional location filter - only count rewards from items with this location
+            category: Optional category filter - only count rewards from items with this category
+            
+        Returns:
+            If reward_id is provided: int (total amount of that reward)
+            If reward_id is None: dict {reward_id: total_amount, ...}
+        """
+        # Get all completed items for this user checklist
+        completed_progress = self.progress_items.filter_by(completed=True).all()
+        completed_item_ids = [p.item_id for p in completed_progress]
+        
+        if not completed_item_ids:
+            return 0 if reward_id else {}
+        
+        # Query for items with rewards
+        query = db.session.query(ChecklistItem, ItemReward).join(
+            ItemReward, ChecklistItem.id == ItemReward.checklist_item_id
+        ).filter(
+            ChecklistItem.id.in_(completed_item_ids)
+        )
+        
+        # Apply location filter if specified
+        if location is not None:
+            query = query.filter(ChecklistItem.location == location)
+        
+        # Apply category filter if specified
+        if category is not None:
+            query = query.filter(ChecklistItem.category == category)
+        
+        # Apply reward filter if specified
+        if reward_id is not None:
+            query = query.filter(ItemReward.reward_id == reward_id)
+        
+        results = query.all()
+        
+        if reward_id is not None:
+            # Return total amount for specific reward
+            return sum(item_reward.amount for _, item_reward in results)
+        else:
+            # Return dict of all rewards
+            tally = {}
+            for _, item_reward in results:
+                if item_reward.reward_id not in tally:
+                    tally[item_reward.reward_id] = 0
+                tally[item_reward.reward_id] += item_reward.amount
+            return tally
     
     def __repr__(self):
         return f'<UserChecklist user_id={self.user_id} checklist_id={self.checklist_id}>'

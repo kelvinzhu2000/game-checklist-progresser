@@ -131,9 +131,19 @@
                                             📋 {{ prereq.prerequisite_item.title }}
                                         </span>
                                     {% elif prereq.prerequisite_reward_id %}
-                                        <span class="item-prerequisite-badge prereq-info">
-                                            🏆 {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
-                                        </span>
+                                        {% if user_copy %}
+                                            {% set tally_key = (prereq.prerequisite_reward_id, prereq.reward_location, prereq.reward_category) %}
+                                            {% set collected = reward_tallies.get(tally_key, 0) %}
+                                            {% set required = prereq.reward_amount or 1 %}
+                                            {% set is_met = collected >= required %}
+                                            <span class="item-prerequisite-badge {% if is_met %}prereq-met{% else %}prereq-unmet{% endif %}">
+                                                🏆 {{ collected }}/{{ required }}x {{ prereq.prerequisite_reward.name }}{% if prereq.reward_location %} ({{ prereq.reward_location }}){% endif %}{% if prereq.reward_category %} [{{ prereq.reward_category }}]{% endif %}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                            </span>
+                                        {% else %}
+                                            <span class="item-prerequisite-badge prereq-info">
+                                                🏆 {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.reward_location %} ({{ prereq.reward_location }}){% endif %}{% if prereq.reward_category %} [{{ prereq.reward_category }}]{% endif %}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                            </span>
+                                        {% endif %}
                                     {% elif prereq.freeform_text %}
                                         <span class="item-prerequisite-badge prereq-info">
                                             ✏️ {{ prereq.freeform_text }}

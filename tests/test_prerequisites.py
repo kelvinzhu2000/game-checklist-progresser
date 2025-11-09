@@ -392,10 +392,11 @@ def test_reward_and_freeform_prerequisites(auth_client, app):
         db.session.add(reward)
         db.session.commit()
         
-        # Add reward prerequisite (informational only)
+        # Add reward prerequisite (now blocking, not informational)
         prereq1 = ItemPrerequisite(
             item_id=item1.id,
             prerequisite_reward_id=reward.id,
+            reward_amount=1,
             consumes_reward=True
         )
         # Add freeform prerequisite (informational only)
@@ -420,7 +421,9 @@ def test_reward_and_freeform_prerequisites(auth_client, app):
         db.session.add(progress1)
         db.session.commit()
         
-        # Check that prerequisites are met (reward and freeform don't block)
+        # Check that reward prerequisite blocks (user has 0 gold, needs 1)
+        # Freeform prerequisites remain informational
         are_met, unmet = item1.are_prerequisites_met(user_checklist.id)
-        assert are_met == True
-        assert len(unmet) == 0
+        assert are_met == False, "Item should be locked - reward prerequisite not met"
+        assert len(unmet) == 1, "Should have 1 unmet prerequisite (reward)"
+        assert unmet[0].prerequisite_reward_id == reward.id
