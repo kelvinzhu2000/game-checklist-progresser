@@ -217,6 +217,89 @@ class UserChecklist(db.Model):
                 tally[item_reward.reward_id] += item_reward.amount
             return tally
     
+    def get_consumed_rewards(self, reward_id=None, location=None, category=None):
+        """Calculate the total amount of rewards consumed by completed items with consuming prerequisites.
+        
+        Args:
+            reward_id: The reward ID to tally. If None, returns a dict of all consumed rewards.
+            location: Optional location filter - only count consumed rewards that match this location filter
+            category: Optional category filter - only count consumed rewards that match this category filter
+            
+        Returns:
+            If reward_id is provided: int (total amount consumed of that reward)
+            If reward_id is None: dict {reward_id: total_consumed, ...}
+        """
+        # Get all completed items for this user checklist
+        completed_progress = self.progress_items.filter_by(completed=True).all()
+        completed_item_ids = [p.item_id for p in completed_progress]
+        
+        if not completed_item_ids:
+            return 0 if reward_id else {}
+        
+        # Query for prerequisites that consume rewards from completed items
+        query = db.session.query(ItemPrerequisite).filter(
+            ItemPrerequisite.item_id.in_(completed_item_ids),
+            ItemPrerequisite.prerequisite_reward_id.isnot(None),
+            ItemPrerequisite.consumes_reward == True
+        )
+        
+        # Apply reward filter if specified
+        if reward_id is not None:
+            query = query.filter(ItemPrerequisite.prerequisite_reward_id == reward_id)
+        
+        # Apply location filter if specified
+        if location is not None:
+            query = query.filter(ItemPrerequisite.reward_location == location)
+        
+        # Apply category filter if specified
+        if category is not None:
+            query = query.filter(ItemPrerequisite.reward_category == category)
+        
+        prerequisites = query.all()
+        
+        if reward_id is not None:
+            # Return total consumed for specific reward
+            return sum(prereq.reward_amount or 1 for prereq in prerequisites)
+        else:
+            # Return dict of all consumed rewards
+            consumed = {}
+            for prereq in prerequisites:
+                if prereq.prerequisite_reward_id not in consumed:
+                    consumed[prereq.prerequisite_reward_id] = 0
+                consumed[prereq.prerequisite_reward_id] += prereq.reward_amount or 1
+            return consumed
+    
+    def get_available_rewards(self, reward_id=None, location=None, category=None):
+        """Calculate the currently available amount of rewards (collected - consumed).
+        
+        Args:
+            reward_id: The reward ID to calculate. If None, returns a dict of all rewards.
+            location: Optional location filter
+            category: Optional category filter
+            
+        Returns:
+            If reward_id is provided: int (available amount of that reward)
+            If reward_id is None: dict {reward_id: available_amount, ...}
+        """
+        if reward_id is not None:
+            collected = self.get_reward_tally(reward_id=reward_id, location=location, category=category)
+            consumed = self.get_consumed_rewards(reward_id=reward_id, location=location, category=category)
+            return max(0, collected - consumed)
+        else:
+            # Get all collected and consumed rewards
+            collected_dict = self.get_reward_tally(location=location, category=category)
+            consumed_dict = self.get_consumed_rewards(location=location, category=category)
+            
+            # Combine to get available
+            available = {}
+            all_reward_ids = set(collected_dict.keys()) | set(consumed_dict.keys())
+            for rid in all_reward_ids:
+                collected = collected_dict.get(rid, 0)
+                consumed = consumed_dict.get(rid, 0)
+                available[rid] = max(0, collected - consumed)
+            
+            return available
+    
     def __repr__(self):
         return f'<UserChecklist user_id={self.user_id} checklist_id={self.checklist_id}>'
 
