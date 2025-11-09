@@ -7,11 +7,25 @@ from app.forms import RegistrationForm, LoginForm, ChecklistForm, ChecklistItemF
 from app.ai_service import generate_checklist_items
 from datetime import datetime
 from sqlalchemy import func
+import logging
+import functools
+
+logger = logging.getLogger(__name__)
+
+def log_function_call(func):
+    """Decorator to log function calls with parameters."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # For route handlers, log the endpoint and request info
+        logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+        return func(*args, **kwargs)
+    return wrapper
 
 main_bp = Blueprint('main', __name__)
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 checklist_bp = Blueprint('checklist', __name__, url_prefix='/checklist')
 
+@log_function_call
 def is_safe_redirect_url(target):
     """
     Validates that a redirect URL is safe (relative to the current domain).
@@ -23,24 +37,29 @@ def is_safe_redirect_url(target):
     parsed = urlparse(target)
     return parsed.netloc == '' and parsed.scheme == ''
 
+@log_function_call
 def get_selected_game():
     """Get the currently selected game from session."""
     return session.get('selected_game')
 
+@log_function_call
 def set_selected_game(game_name):
     """Set the currently selected game in session."""
     session['selected_game'] = game_name
 
+@log_function_call
 def clear_selected_game():
     """Clear the currently selected game from session."""
     session.pop('selected_game', None)
 
 @main_bp.route('/')
+@log_function_call
 def index():
     public_checklists = Checklist.query.filter_by(is_public=True).order_by(Checklist.created_at.desc()).limit(10).all()
     return render_template('index.html', checklists=public_checklists)
 
 @main_bp.route('/games')
+@log_function_call
 def games():
     """Unified games page showing all games with search capability."""
     search_query = request.args.get('search', '').strip()
@@ -81,6 +100,7 @@ def games():
 
 @main_bp.route('/games/new', methods=['GET', 'POST'])
 @login_required
+@log_function_call
 def add_game():
     """Add a new game to the system."""
     form = GameForm()
@@ -94,6 +114,7 @@ def add_game():
     return render_template('add_game.html', form=form)
 
 @main_bp.route('/games/<int:game_id>')
+@log_function_call
 def game_detail(game_id):
     """Game detail page showing all checklists for a game."""
     game = db.session.get(Game, game_id)
@@ -129,16 +150,19 @@ def game_detail(game_id):
                          user_copied=user_copied)
 
 @main_bp.route('/browse')
+@log_function_call
 def browse():
     """Legacy route - redirect to games page."""
     return redirect(url_for('main.games'))
 
 @main_bp.route('/browse/<int:game_id>')
+@log_function_call
 def browse_game(game_id):
     """Legacy route - redirect to game detail page."""
     return redirect(url_for('main.game_detail', game_id=game_id))
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
+@log_function_call
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -155,6 +179,7 @@ def register():
     return render_template('register.html', form=form)
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@log_function_call
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -177,6 +202,7 @@ def login():
 
 @auth_bp.route('/logout')
 @login_required
+@log_function_call
 def logout():
     logout_user()
     flash('You have been logged out.', 'info')
@@ -185,6 +211,7 @@ def logout():
 @checklist_bp.route('/create', methods=['GET', 'POST'])
 @checklist_bp.route('/create/<int:game_id>', methods=['GET', 'POST'])
 @login_required
+@log_function_call
 def create(game_id=None):
     """Create a new checklist, optionally for a specific game."""
     game = None
@@ -248,6 +275,7 @@ def create(game_id=None):
     return render_template('create_checklist.html', form=form, game=game)
 
 @checklist_bp.route('/<int:checklist_id>')
+@log_function_call
 def view(checklist_id):
     checklist = Checklist.query.get_or_404(checklist_id)
     
@@ -304,6 +332,7 @@ def view(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required
+@log_function_call
 def edit(checklist_id):
     """Edit a checklist that the user created."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -368,6 +397,7 @@ def edit(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/batch-update', methods=['POST'])
 @login_required
+@log_function_call
 def batch_update(checklist_id):
     """Batch update checklist metadata and items."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -601,6 +631,7 @@ def batch_update(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/add_item', methods=['GET', 'POST'])
 @login_required
+@log_function_call
 def add_item(checklist_id):
     checklist = Checklist.query.get_or_404(checklist_id)
     
@@ -630,6 +661,7 @@ def add_item(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/copy', methods=['POST'])
 @login_required
+@log_function_call
 def copy(checklist_id):
     checklist = Checklist.query.get_or_404(checklist_id)
     
@@ -664,6 +696,7 @@ def copy(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/progress/<int:item_id>/toggle', methods=['POST'])
 @login_required
+@log_function_call
 def toggle_progress(checklist_id, item_id):
     user_checklist = UserChecklist.query.filter_by(
         user_id=current_user.id,
@@ -767,6 +800,7 @@ def toggle_progress(checklist_id, item_id):
     return redirect(url_for('checklist.view', checklist_id=checklist_id))
 
 @checklist_bp.route('/<int:checklist_id>/categories', methods=['GET'])
+@log_function_call
 def get_categories(checklist_id):
     """Get unique categories for a checklist."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -784,6 +818,7 @@ def get_categories(checklist_id):
     return jsonify({'categories': category_list})
 
 @checklist_bp.route('/<int:checklist_id>/locations', methods=['GET'])
+@log_function_call
 def get_locations(checklist_id):
     """Get unique locations for a checklist."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -801,6 +836,7 @@ def get_locations(checklist_id):
     return jsonify({'locations': location_list})
 
 @checklist_bp.route('/<int:checklist_id>/rewards', methods=['GET'])
+@log_function_call
 def get_rewards(checklist_id):
     """Get unique rewards for a checklist."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -822,6 +858,7 @@ def get_rewards(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/delete', methods=['POST'])
 @login_required
+@log_function_call
 def delete(checklist_id):
     """Delete a checklist that the user created."""
     checklist = Checklist.query.get_or_404(checklist_id)
@@ -844,6 +881,7 @@ def delete(checklist_id):
 
 @checklist_bp.route('/<int:checklist_id>/delete-copy', methods=['POST'])
 @login_required
+@log_function_call
 def delete_copy(checklist_id):
     """Delete a user's copy of a checklist (removes their progress)."""
     user_checklist = UserChecklist.query.filter_by(
@@ -867,29 +905,34 @@ def delete_copy(checklist_id):
 
 @main_bp.route('/my-games')
 @login_required
+@log_function_call
 def my_games():
     """Legacy route - redirect to games page."""
     return redirect(url_for('main.games'))
 
 @main_bp.route('/select-game/<int:game_id>')
 @login_required
+@log_function_call
 def select_game(game_id):
     """Legacy route - redirect to game detail page."""
     return redirect(url_for('main.game_detail', game_id=game_id))
 
 @main_bp.route('/clear-game')
 @login_required
+@log_function_call
 def clear_game():
     """Legacy route - redirect to games page."""
     return redirect(url_for('main.games'))
 
 @main_bp.route('/my-checklists')
 @login_required
+@log_function_call
 def my_checklists():
     """Legacy route - redirect to games page."""
     return redirect(url_for('main.games'))
 
 @main_bp.route('/api/game-names')
+@log_function_call
 def get_game_names():
     """Get all unique game names for auto-complete."""
     games = Game.query.order_by(Game.name).all()
@@ -897,6 +940,7 @@ def get_game_names():
     return jsonify({'game_names': game_names})
 
 @main_bp.route('/api/categories/<int:game_id>')
+@log_function_call
 def get_categories_for_game(game_id):
     """Get unique categories for a specific game."""
     # Get all checklists for this game
@@ -917,6 +961,7 @@ def get_categories_for_game(game_id):
     return jsonify({'categories': category_list})
 
 @main_bp.route('/api/locations/<int:game_id>')
+@log_function_call
 def get_locations_for_game(game_id):
     """Get unique locations for a specific game."""
     # Get all checklists for this game
