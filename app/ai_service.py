@@ -4,11 +4,21 @@ AI Service for generating checklist items using OpenAI.
 import os
 import json
 import logging
+import functools
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
+def log_function_call(func):
+    """Decorator to log function calls with parameters."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+        return func(*args, **kwargs)
+    return wrapper
 
+
+@log_function_call
 def generate_checklist_items(game_name, title, prompt, description=""):
     """
     Generate checklist items using OpenAI API.
