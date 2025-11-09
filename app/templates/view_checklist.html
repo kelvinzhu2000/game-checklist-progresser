@@ -90,11 +90,19 @@
                 {% set _ = reward_names.append(item_reward.reward.name) %}
                 {% set _ = reward_data.append(item_reward.reward.name ~ ':' ~ item_reward.amount|string) %}
             {% endfor %}
+            {% set reward_prereq_data = [] %}
+            {% for prereq in item.prerequisites %}
+                {% if prereq.prerequisite_reward_id %}
+                    {% set prereq_str = prereq.prerequisite_reward_id|string ~ '|' ~ (prereq.reward_amount or 1)|string ~ '|' ~ (prereq.reward_location or '') ~ '|' ~ (prereq.reward_category or '') %}
+                    {% set _ = reward_prereq_data.append(prereq_str) %}
+                {% endif %}
+            {% endfor %}
             <li class="item {% if user_copy and effective_progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %}" 
                 data-location="{{ item.location or '' }}"
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
                 data-reward-details="{{ ','.join(reward_data) }}"
+                data-reward-prerequisites="{{ ';'.join(reward_prereq_data) }}"
                 data-completed="{{ 'true' if (user_copy and effective_progress.get(item.id)) else 'false' }}"
                 data-actual-completed="{{ 'true' if (user_copy and progress.get(item.id)) else 'false' }}"
                 data-item-id="{{ item.id }}">
@@ -131,9 +139,19 @@
                                             📋 {{ prereq.prerequisite_item.title }}
                                         </span>
                                     {% elif prereq.prerequisite_reward_id %}
-                                        <span class="item-prerequisite-badge prereq-info">
-                                            🏆 {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}
-                                        </span>
+                                        {% if user_copy %}
+                                            {% set tally_key = (prereq.prerequisite_reward_id, prereq.reward_location, prereq.reward_category) %}
+                                            {% set collected = reward_tallies.get(tally_key, 0) %}
+                                            {% set required = prereq.reward_amount or 1 %}
+                                            {% set is_met = collected >= required %}
+                                            <span class="item-prerequisite-badge {% if is_met %}prereq-met{% else %}prereq-unmet{% endif %}">
+                                                🏆 {{ collected }}/{{ required }}x {{ prereq.prerequisite_reward.name }}{% if prereq.reward_location %} ({{ prereq.reward_location }}){% endif %}{% if prereq.reward_category %} [{{ prereq.reward_category }}]{% endif %}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                            </span>
+                                        {% else %}
+                                            <span class="item-prerequisite-badge prereq-info">
+                                                🏆 {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.reward_location %} ({{ prereq.reward_location }}){% endif %}{% if prereq.reward_category %} [{{ prereq.reward_category }}]{% endif %}{% if prereq.consumes_reward %} (consumes){% endif %}
+                                            </span>
+                                        {% endif %}
                                     {% elif prereq.freeform_text %}
                                         <span class="item-prerequisite-badge prereq-info">
                                             ✏️ {{ prereq.freeform_text }}
@@ -158,6 +176,23 @@
 </div>
 
 <script>
+// Build reward ID to name mapping
+const rewardIdToName = {};
+{% if user_copy %}
+    {% for item in items %}
+        {% for item_reward in item.rewards %}
+            rewardIdToName[{{ item_reward.reward_id }}] = '{{ item_reward.reward.name }}';
+        {% endfor %}
+    {% endfor %}
+    {% for item in items %}
+        {% for prereq in item.prerequisites %}
+            {% if prereq.prerequisite_reward_id %}
+                rewardIdToName[{{ prereq.prerequisite_reward_id }}] = '{{ prereq.prerequisite_reward.name }}';
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+{% endif %}
+
 // Toggle item progress via AJAX to avoid page reload
 function toggleItemProgress(checkbox) {
     const checklistId = checkbox.getAttribute('data-checklist-id');
@@ -215,8 +250,9 @@ function toggleItemProgress(checkbox) {
                 lockItems(data.locked_items);
             }
             
-            // Update the reward tally
+            // Update the reward tally and reward prerequisite badges
             updateRewardTally();
+            updateRewardPrerequisiteBadges();
         }
     })
     .catch(error => {
@@ -627,6 +663,104 @@ function updateRewardTally() {
             filteredRewardsDiv.appendChild(rewardItem);
         });
     }
+}
+
+// Function to calculate reward tallies from completed items
+function calculateRewardTallies() {
+    const tallies = {}; // { rewardName: { total: X, collected: Y } }
+    const allItems = document.querySelectorAll('.item');
+    
+    allItems.forEach(item => {
+        const isCompleted = item.getAttribute('data-completed') === 'true';
+        const rewardDetails = item.getAttribute('data-reward-details');
+        const location = item.getAttribute('data-location');
+        const category = item.getAttribute('data-category');
+        
+        if (rewardDetails && rewardDetails.trim() !== '') {
+            const rewards = rewardDetails.split(',');
+            rewards.forEach(rewardStr => {
+                const [rewardName, amountStr] = rewardStr.split(':');
+                const amount = parseInt(amountStr) || 0;
+                
+                // Store with location and category for filtering
+                const key = `${rewardName}|${location}|${category}`;
+                if (!tallies[key]) {
+                    tallies[key] = { collected: 0, rewardName, location, category };
+                }
+                
+                if (isCompleted) {
+                    tallies[key].collected += amount;
+                }
+            });
+        }
+    });
+    
+    return tallies;
+}
+
+// Function to update reward prerequisite badges based on current tallies
+function updateRewardPrerequisiteBadges() {
+    const tallies = calculateRewardTallies();
+    const allItems = document.querySelectorAll('.item');
+    
+    allItems.forEach(item => {
+        const prereqData = item.getAttribute('data-reward-prerequisites');
+        if (!prereqData || prereqData.trim() === '') return;
+        
+        // Parse reward prerequisites: "rewardId|amount|location|category"
+        const prereqs = prereqData.split(';').filter(p => p);
+        const prereqBadges = item.querySelectorAll('.item-prerequisite-badge');
+        
+        prereqs.forEach((prereqStr, index) => {
+            const [rewardIdStr, amountStr, location, category] = prereqStr.split('|');
+            const rewardId = parseInt(rewardIdStr);
+            const required = parseInt(amountStr);
+            const rewardName = rewardIdToName[rewardId];
+            
+            if (!rewardName) return;
+            
+            // Calculate collected amount with filters
+            let collected = 0;
+            Object.entries(tallies).forEach(([key, data]) => {
+                const [tallyRewardName, tallyLocation, tallyCategory] = key.split('|');
+                
+                // Check if reward name matches
+                if (tallyRewardName !== rewardName) return;
+                
+                // Check if location filter matches (if specified)
+                if (location && location !== tallyLocation) return;
+                
+                // Check if category filter matches (if specified)
+                if (category && category !== tallyCategory) return;
+                
+                collected += data.collected;
+            });
+            
+            // Find the corresponding badge (reward prerequisite badges start with 🏆)
+            prereqBadges.forEach(badge => {
+                const badgeText = badge.textContent.trim();
+                if (badgeText.startsWith('🏆') && badgeText.includes(rewardName)) {
+                    // Update the badge text with new tally
+                    const isMet = collected >= required;
+                    let newText = `🏆 ${collected}/${required}x ${rewardName}`;
+                    if (location) newText += ` (${location})`;
+                    if (category) newText += ` [${category}]`;
+                    if (badgeText.includes('(consumes)')) newText += ' (consumes)';
+                    
+                    badge.textContent = newText;
+                    
+                    // Update badge styling
+                    if (isMet) {
+                        badge.classList.remove('prereq-unmet');
+                        badge.classList.add('prereq-met');
+                    } else {
+                        badge.classList.remove('prereq-met');
+                        badge.classList.add('prereq-unmet');
+                    }
+                }
+            });
+        });
+    });
 }
 
 // Update prerequisite badges to reflect completed status

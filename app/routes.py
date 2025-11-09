@@ -259,6 +259,7 @@ def view(checklist_id):
     progress = {}
     effective_progress = {}  # Track effective completion (considers prerequisites)
     item_locked = {}  # Track which items are locked due to prerequisites
+    reward_tallies = {}  # Track reward tallies for checking prerequisites
     
     if current_user.is_authenticated:
         user_copy = UserChecklist.query.filter_by(
@@ -267,6 +268,20 @@ def view(checklist_id):
         ).first()
         
         if user_copy:
+            # Calculate all reward tallies for prerequisite checking
+            # We need to calculate for each unique combination of reward, location, and category
+            for item in items:
+                for prereq in item.prerequisites:
+                    if prereq.prerequisite_reward_id:
+                        # Create a key for this specific reward with filters
+                        key = (prereq.prerequisite_reward_id, prereq.reward_location, prereq.reward_category)
+                        if key not in reward_tallies:
+                            reward_tallies[key] = user_copy.get_reward_tally(
+                                reward_id=prereq.prerequisite_reward_id,
+                                location=prereq.reward_location,
+                                category=prereq.reward_category
+                            )
+            
             for item in items:
                 prog = UserProgress.query.filter_by(
                     user_checklist_id=user_copy.id,
@@ -285,7 +300,7 @@ def view(checklist_id):
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
                          user_copy=user_copy, progress=progress, effective_progress=effective_progress,
-                         item_locked=item_locked)
+                         item_locked=item_locked, reward_tallies=reward_tallies)
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -707,6 +722,39 @@ def toggle_progress(checklist_id, item_id):
                     # Item was just unchecked - dependent items should be locked
                     # (since this item is now a prerequisite that is NOT met)
                     locked_items.append(dependent_item.id)
+        
+        # Also check for items that depend on rewards from this item
+        # Get all reward IDs that this item provides
+        item_reward_ids = [ir.reward_id for ir in item.rewards]
+        
+        if item_reward_ids:
+            # Find all items in this checklist that have reward prerequisites for these rewards
+            all_items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+            
+            for check_item in all_items:
+                # Skip the item we just toggled
+                if check_item.id == item_id:
+                    continue
+                
+                # Check if this item has reward prerequisites for any of the rewards we provide
+                has_reward_prereq = False
+                for prereq in check_item.prerequisites:
+                    if prereq.prerequisite_reward_id in item_reward_ids:
+                        has_reward_prereq = True
+                        break
+                
+                if has_reward_prereq:
+                    # Check if this item's prerequisites are now met or not met
+                    are_met, unmet = check_item.are_prerequisites_met(user_checklist.id)
+                    
+                    # Check if this item is in our lists already
+                    if check_item.id not in unlocked_items and check_item.id not in locked_items:
+                        if are_met:
+                            # Prerequisites are met, so unlock (if not already)
+                            unlocked_items.append(check_item.id)
+                        else:
+                            # Prerequisites are not met, so lock
+                            locked_items.append(check_item.id)
         
         return jsonify({
             'success': True, 
