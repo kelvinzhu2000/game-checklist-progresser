@@ -190,24 +190,26 @@ function toggleItemProgress(checkbox) {
     })
     .then(data => {
         if (data && data.success) {
-        // Update the item's completed state
-        listItem.setAttribute('data-completed', isChecked ? 'true' : 'false');
-        
-        // Update the completed class
-        if (isChecked) {
-            listItem.classList.add('completed');
-        } else {
-            listItem.classList.remove('completed');
+            // Update the item's completed state
+            listItem.setAttribute('data-completed', isChecked ? 'true' : 'false');
+            
+            // Update the completed class
+            if (isChecked) {
+                listItem.classList.add('completed');
+            } else {
+                listItem.classList.remove('completed');
+            }
+            
+            // Update the reward tally
+            updateRewardTally();
         }
-        
-        // Update the reward tally
-        updateRewardTally();
     })
     .catch(error => {
         console.error('Error toggling progress:', error);
         // Revert checkbox state on error
         checkbox.checked = !isChecked;
         alert('Failed to update progress. Please try again.');
+    });
     });
 }
 
