@@ -200,6 +200,19 @@ function toggleItemProgress(checkbox) {
                 listItem.classList.remove('completed');
             }
             
+            // Update prerequisite badges for this item in other items
+            updatePrerequisiteBadges(itemId, isChecked);
+            
+            // Handle newly unlocked items
+            if (data.unlocked_items && data.unlocked_items.length > 0) {
+                unlockItems(data.unlocked_items);
+            }
+            
+            // Handle newly locked items
+            if (data.locked_items && data.locked_items.length > 0) {
+                lockItems(data.locked_items);
+            }
+            
             // Update the reward tally
             updateRewardTally();
         }
@@ -612,6 +625,98 @@ function updateRewardTally() {
             filteredRewardsDiv.appendChild(rewardItem);
         });
     }
+}
+
+// Update prerequisite badges to reflect completed status
+function updatePrerequisiteBadges(itemId, isCompleted) {
+    // Find all prerequisite badges that reference this item
+    const allItems = document.querySelectorAll('.item');
+    
+    allItems.forEach(item => {
+        const prereqBadges = item.querySelectorAll('.item-prerequisite-badge');
+        prereqBadges.forEach(badge => {
+            // Check if this badge is for a prerequisite item (not reward or freeform)
+            const badgeText = badge.textContent.trim();
+            // Prerequisite item badges start with 📋
+            if (badgeText.startsWith('📋')) {
+                // We need to check if this badge corresponds to the item we just updated
+                // The badge text contains the item title, but we need to match by examining
+                // the data in the template. Since we don't have direct access to the
+                // prerequisite item ID from the badge, we'll update all badges
+                // when we unlock items below.
+                
+                // For now, we update the badge style based on completion
+                if (isCompleted) {
+                    badge.classList.remove('prereq-unmet');
+                    badge.classList.add('prereq-met');
+                } else {
+                    badge.classList.remove('prereq-met');
+                    badge.classList.add('prereq-unmet');
+                }
+            }
+        });
+    });
+}
+
+// Unlock items that now have their prerequisites met
+function unlockItems(itemIds) {
+    itemIds.forEach(itemId => {
+        const item = document.querySelector(`.item[data-item-id="${itemId}"]`);
+        if (!item) return;
+        
+        // Remove locked class
+        item.classList.remove('locked');
+        
+        // Enable the checkbox
+        const checkbox = item.querySelector('.item-checkbox');
+        if (checkbox) {
+            checkbox.disabled = false;
+        }
+        
+        // Update all prerequisite badges for this item to show they're met
+        const prereqBadges = item.querySelectorAll('.item-prerequisite-badge');
+        prereqBadges.forEach(badge => {
+            // Only update item prerequisite badges (those starting with 📋)
+            if (badge.textContent.trim().startsWith('📋')) {
+                badge.classList.remove('prereq-unmet');
+                badge.classList.add('prereq-met');
+            }
+        });
+    });
+}
+
+// Lock items that no longer have their prerequisites met
+function lockItems(itemIds) {
+    itemIds.forEach(itemId => {
+        const item = document.querySelector(`.item[data-item-id="${itemId}"]`);
+        if (!item) return;
+        
+        // Add locked class
+        item.classList.add('locked');
+        
+        // Disable the checkbox
+        const checkbox = item.querySelector('.item-checkbox');
+        if (checkbox) {
+            checkbox.disabled = true;
+            // If the item was checked, uncheck it since it's now locked
+            if (checkbox.checked) {
+                checkbox.checked = false;
+                // Update the item's completed state
+                item.setAttribute('data-completed', 'false');
+                item.classList.remove('completed');
+            }
+        }
+        
+        // Update all prerequisite badges for this item to show they're not met
+        const prereqBadges = item.querySelectorAll('.item-prerequisite-badge');
+        prereqBadges.forEach(badge => {
+            // Only update item prerequisite badges (those starting with 📋)
+            if (badge.textContent.trim().startsWith('📋')) {
+                badge.classList.remove('prereq-met');
+                badge.classList.add('prereq-unmet');
+            }
+        });
+    });
 }
 </script>
 
