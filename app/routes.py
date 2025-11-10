@@ -318,8 +318,8 @@ def view(checklist_id):
                 # Store the actual completion state from database
                 progress[item.id] = prog.completed if prog else False
                 
-                # Check if item is locked due to prerequisites
-                prereqs_met, unmet_prereqs = item.are_prerequisites_met(user_copy.id)
+                # Check if item is locked due to prerequisites (with chaining)
+                prereqs_met, unmet_prereqs = are_prerequisites_met_with_chaining(item, user_copy.id)
                 item_locked[item.id] = not prereqs_met
                 
                 # Effective completion: only true if actually completed AND prerequisites are met
