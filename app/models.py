@@ -2,8 +2,26 @@ from app import db, login_manager
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import logging
+import functools
+
+logger = logging.getLogger(__name__)
+
+def log_function_call(func):
+    """Decorator to log function calls with parameters."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Get the instance (self) if it's a method
+        if args and hasattr(args[0], '__class__'):
+            class_name = args[0].__class__.__name__
+            logger.debug(f"{class_name}.{func.__name__} called with args={args[1:]}, kwargs={kwargs}")
+        else:
+            logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+        return func(*args, **kwargs)
+    return wrapper
 
 @login_manager.user_loader
+@log_function_call
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
@@ -22,11 +40,13 @@ class User(UserMixin, db.Model):
     user_checklists = db.relationship('UserChecklist', backref='user', lazy='dynamic',
                                      cascade='all, delete-orphan')
     
+    @log_function_call
     def set_password(self, password):
         # Use pbkdf2:sha256 method for better compatibility across Python versions
         # Some Python builds (e.g., macOS Python 3.9) may not have scrypt available
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
     
+    @log_function_call
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
     
@@ -86,6 +106,7 @@ class ChecklistItem(db.Model):
                                    foreign_keys='ItemPrerequisite.item_id',
                                    cascade='all, delete-orphan')
     
+    @log_function_call
     def are_prerequisites_met(self, user_checklist_id=None):
         """Check if all prerequisites are met for this item.
         
@@ -158,6 +179,7 @@ class UserChecklist(db.Model):
     progress_items = db.relationship('UserProgress', backref='user_checklist', lazy='dynamic',
                                     cascade='all, delete-orphan')
     
+    @log_function_call
     def get_progress_percentage(self):
         total_items = ChecklistItem.query.filter_by(checklist_id=self.checklist_id).count()
         if total_items == 0:
@@ -165,6 +187,7 @@ class UserChecklist(db.Model):
         completed_items = self.progress_items.filter_by(completed=True).count()
         return int((completed_items / total_items) * 100)
     
+    @log_function_call
     def get_reward_tally(self, reward_id=None, location=None, category=None):
         """Calculate the total amount of a specific reward collected from completed items.
         

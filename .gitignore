@@ -26,6 +26,8 @@ wheels/
 # Flask
 instance/
 .webassets-cache
+flask.log
+*.log
 
 # Database
 *.db

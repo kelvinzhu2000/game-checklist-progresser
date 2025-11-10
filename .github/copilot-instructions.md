@@ -35,6 +35,30 @@ game-checklist-progresser/
 - Add docstrings to functions and classes where helpful
 - Keep functions focused on a single responsibility
 
+### Logging Guidelines
+- **ALWAYS** add debug-level logging to function calls using the `@log_function_call` decorator
+- Import logging and functools at the top of each module: `import logging` and `import functools`
+- Create a logger for each module: `logger = logging.getLogger(__name__)`
+- Use the decorator on:
+  - All route handlers (Flask view functions)
+  - Model methods (User, Checklist, ChecklistItem, etc.)
+  - Helper functions and utilities
+  - Form validators
+  - Service functions (AI generation, etc.)
+- The decorator automatically logs function name, arguments, and keyword arguments
+- Example decorator definition (should be in each module that needs it):
+  ```python
+  def log_function_call(func):
+      """Decorator to log function calls with parameters."""
+      @functools.wraps(func)
+      def wrapper(*args, **kwargs):
+          logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+          return func(*args, **kwargs)
+      return wrapper
+  ```
+- Logging is configured in `app/__init__.py` with both console and file output
+- Log files are written to `flask.log` in the project root
+
 ### Database Models
 The application has 5 main models with the following relationships:
 
