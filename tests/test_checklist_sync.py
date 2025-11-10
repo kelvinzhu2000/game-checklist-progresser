@@ -453,3 +453,74 @@ def test_user_can_toggle_progress_on_synced_items(client, app):
         
         assert progress is not None
         assert progress.completed is True
+
+def test_toggle_progress_creates_missing_entry_for_legacy_data(client, app):
+    """Test that toggle_progress creates UserProgress entry if it's missing (for legacy data)."""
+    with app.app_context():
+        # Create a user
+        user = User(username='testuser', email='test@example.com')
+        user.set_password('password123')
+        db.session.add(user)
+        db.session.commit()
+        user_id = user.id
+        
+        # Create a game and checklist
+        game = Game(name='Test Game')
+        db.session.add(game)
+        db.session.commit()
+        
+        checklist = Checklist(
+            title='Test Checklist',
+            game_id=game.id,
+            creator_id=user_id,
+            is_public=True
+        )
+        db.session.add(checklist)
+        db.session.commit()
+        checklist_id = checklist.id
+        
+        # Add an item
+        item = ChecklistItem(checklist_id=checklist_id, title='Item 1', order=1)
+        db.session.add(item)
+        db.session.commit()
+        item_id = item.id
+        
+        # User has a checklist copy but NO UserProgress entry (simulating legacy data)
+        user_checklist = UserChecklist(user_id=user_id, checklist_id=checklist_id)
+        db.session.add(user_checklist)
+        db.session.commit()
+        user_checklist_id = user_checklist.id
+        
+        # Verify no progress entry exists
+        assert UserProgress.query.filter_by(
+            user_checklist_id=user_checklist_id,
+            item_id=item_id
+        ).first() is None
+    
+    # Login
+    client.post('/auth/login', data={
+        'username': 'testuser',
+        'password': 'password123'
+    })
+    
+    # Try to toggle progress - should create the missing entry and succeed
+    response = client.post(
+        f'/checklist/{checklist_id}/progress/{item_id}/toggle',
+        headers={'X-Requested-With': 'XMLHttpRequest'},
+        content_type='application/json'
+    )
+    
+    # Should succeed and create the entry
+    assert response.status_code == 200
+    assert response.json['success'] is True
+    assert response.json['completed'] is True
+    
+    # Verify the progress entry was created
+    with app.app_context():
+        progress = UserProgress.query.filter_by(
+            user_checklist_id=user_checklist_id,
+            item_id=item_id
+        ).first()
+        
+        assert progress is not None, "UserProgress entry should have been created"
+        assert progress.completed is True, "Item should be marked as completed"
