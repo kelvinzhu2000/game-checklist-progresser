@@ -318,8 +318,8 @@ def view(checklist_id):
                 # Store the actual completion state from database
                 progress[item.id] = prog.completed if prog else False
                 
-                # Check if item is locked due to prerequisites
-                prereqs_met, unmet_prereqs = item.are_prerequisites_met(user_copy.id)
+                # Check if item is locked due to prerequisites (with chaining)
+                prereqs_met, unmet_prereqs = are_prerequisites_met_with_chaining(item, user_copy.id)
                 item_locked[item.id] = not prereqs_met
                 
                 # Effective completion: only true if actually completed AND prerequisites are met
@@ -705,6 +705,283 @@ def copy(checklist_id):
     flash('Checklist copied to your account!', 'success')
     return redirect(url_for('main.game_detail', game_id=checklist.game_id))
 
+@log_function_call
+def are_prerequisites_met_with_chaining(item, user_checklist_id, checked_items=None):
+    """
+    Check if prerequisites are met, considering the chaining of locked items.
+    
+    An item's prerequisites are met only if:
+    1. Direct prerequisites are met (items completed, rewards available)
+    2. For prerequisite items: those items' prerequisites are also met (recursive)
+    
+    This prevents the situation where:
+    - Item B requires Item A
+    - Item C requires Item B
+    - If A is unchecked, B becomes locked
+    - C should also be locked because B is locked (even though B is still marked completed in DB)
+    
+    Args:
+        item: ChecklistItem to check
+        user_checklist_id: ID of user's checklist
+        checked_items: Set of item IDs already checked (to prevent infinite loops)
+        
+    Returns:
+        tuple: (bool, list) - (are_met, list_of_unmet_prerequisites)
+    """
+    if checked_items is None:
+        checked_items = set()
+    
+    # Prevent infinite loops in circular dependencies
+    if item.id in checked_items:
+        return (True, [])
+    
+    checked_items.add(item.id)
+    unmet = []
+    
+    for prereq in item.prerequisites:
+        # Type 1: Prerequisite checklist item
+        if prereq.prerequisite_item_id:
+            if user_checklist_id:
+                # Check if the prerequisite item is completed
+                progress = UserProgress.query.filter_by(
+                    user_checklist_id=user_checklist_id,
+                    item_id=prereq.prerequisite_item_id
+                ).first()
+                
+                if not progress or not progress.completed:
+                    unmet.append(prereq)
+                else:
+                    # Item is completed, but we also need to check if ITS prerequisites are met
+                    # (this is the chaining part)
+                    prereq_item = ChecklistItem.query.get(prereq.prerequisite_item_id)
+                    if prereq_item:
+                        prereq_met, _ = are_prerequisites_met_with_chaining(
+                            prereq_item, user_checklist_id, checked_items
+                        )
+                        if not prereq_met:
+                            # The prerequisite item's prerequisites aren't met,
+                            # so this item is effectively locked
+                            unmet.append(prereq)
+            else:
+                # Can't verify completion without user_checklist_id
+                unmet.append(prereq)
+        
+        # Type 2: Prerequisite reward - check if user has collected enough
+        elif prereq.prerequisite_reward_id:
+            if user_checklist_id:
+                # Calculate the reward tally with filters
+                # Pass checked_items to avoid infinite loops when checking
+                # items that provide rewards used in their own prerequisites
+                collected = get_available_rewards_with_chaining(
+                    user_checklist_id,
+                    prereq.prerequisite_reward_id,
+                    prereq.reward_location,
+                    prereq.reward_category,
+                    checked_items
+                )
+                required = prereq.reward_amount or 1
+                
+                # Check if user has collected enough of this reward
+                if collected < required:
+                    unmet.append(prereq)
+            else:
+                # Can't verify completion without user_checklist_id
+                unmet.append(prereq)
+        
+        # Type 3: Freeform text (informational only)
+        elif prereq.freeform_text:
+            # Freeform prerequisites are informational, don't block completion
+            pass
+    
+    return (len(unmet) == 0, unmet)
+
+@log_function_call
+def get_available_rewards_with_chaining(user_checklist_id, reward_id, location, category, checked_items):
+    """
+    Calculate available rewards considering prerequisite chaining.
+    
+    Only count rewards from items that:
+    1. Are completed
+    2. Have their prerequisites met (recursively)
+    
+    Args:
+        user_checklist_id: ID of user's checklist
+        reward_id: Reward ID to count
+        location: Location filter (or None)
+        category: Category filter (or None)
+        checked_items: Set of already checked items to prevent loops
+        
+    Returns:
+        int: Available amount of the reward
+    """
+    user_checklist = db.session.get(UserChecklist, user_checklist_id)
+    if not user_checklist:
+        return 0
+    
+    # Get all completed items for this user checklist
+    completed_progress = user_checklist.progress_items.filter_by(completed=True).all()
+    completed_item_ids = [p.item_id for p in completed_progress]
+    
+    if not completed_item_ids:
+        return 0
+    
+    # Query for items with rewards
+    query = db.session.query(ChecklistItem, ItemReward).join(
+        ItemReward, ChecklistItem.id == ItemReward.checklist_item_id
+    ).filter(
+        ChecklistItem.id.in_(completed_item_ids),
+        ItemReward.reward_id == reward_id
+    )
+    
+    # Apply location filter if specified
+    if location is not None:
+        query = query.filter(ChecklistItem.location == location)
+    
+    # Apply category filter if specified
+    if category is not None:
+        query = query.filter(ChecklistItem.category == category)
+    
+    results = query.all()
+    
+    # Sum up rewards, but only from items whose prerequisites are met
+    total = 0
+    for check_item, item_reward in results:
+        # Skip items that are currently being checked (to avoid circular logic)
+        if check_item.id in checked_items:
+            continue
+            
+        # Check if this item's prerequisites are met (with chaining)
+        prereqs_met, _ = are_prerequisites_met_with_chaining(
+            check_item, user_checklist_id, checked_items.copy()
+        )
+        if prereqs_met:
+            total += item_reward.amount
+    
+    return total
+
+@log_function_call
+def get_affected_items_recursive(checklist_id, user_checklist_id, changed_item_id, is_now_completed):
+    """
+    Recursively find all items affected by toggling a checklist item.
+    
+    This implements proper prerequisite chaining:
+    - When an item is checked/unchecked, it may affect items that depend on it
+    - Those affected items may in turn affect other items that depend on them
+    - This continues recursively until no more items are affected
+    
+    Args:
+        checklist_id: ID of the checklist
+        user_checklist_id: ID of the user's checklist instance
+        changed_item_id: ID of the item that was just toggled
+        is_now_completed: Whether the item is now completed (True) or uncompleted (False)
+        
+    Returns:
+        tuple: (unlocked_item_ids, locked_item_ids) - lists of item IDs
+    """
+    unlocked_items = []
+    locked_items = []
+    processed_items = {changed_item_id}  # Track items we've already processed to avoid loops
+    items_to_check = []  # Queue of items to check for cascading effects
+    
+    # Start by finding immediate dependencies of the changed item
+    changed_item = ChecklistItem.query.get(changed_item_id)
+    if not changed_item:
+        return unlocked_items, locked_items
+    
+    # Find all items with item prerequisites on the changed item
+    dependent_prereqs = ItemPrerequisite.query.filter_by(
+        prerequisite_item_id=changed_item_id
+    ).all()
+    
+    for prereq in dependent_prereqs:
+        if prereq.item_id not in processed_items:
+            items_to_check.append(prereq.item_id)
+    
+    # Find all items with reward prerequisites that might be affected
+    # We need to check ALL items when ANY item is toggled, because:
+    # 1. The changed item might provide rewards that other items need
+    # 2. The changed item might have become locked, affecting reward availability
+    all_items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+    
+    for check_item in all_items:
+        if check_item.id == changed_item_id or check_item.id in processed_items:
+            continue
+        
+        # Check if this item has any reward prerequisites
+        # (these might be affected by the change)
+        has_reward_prereq = any(prereq.prerequisite_reward_id for prereq in check_item.prerequisites)
+        if has_reward_prereq:
+            if check_item.id not in items_to_check:
+                items_to_check.append(check_item.id)
+    
+    # Process all potentially affected items recursively
+    while items_to_check:
+        item_id = items_to_check.pop(0)
+        
+        if item_id in processed_items:
+            continue
+            
+        processed_items.add(item_id)
+        
+        item = ChecklistItem.query.get(item_id)
+        if not item or item.checklist_id != checklist_id:
+            continue
+        
+        # Check if this item's prerequisites are met (with chaining)
+        are_met, unmet = are_prerequisites_met_with_chaining(item, user_checklist_id)
+        
+        if are_met:
+            # Prerequisites are met - item should be unlocked
+            if item_id not in unlocked_items:
+                unlocked_items.append(item_id)
+                # This item becoming unlocked might unlock other items, so add them to check
+                _add_dependent_items(item_id, checklist_id, items_to_check, processed_items)
+        else:
+            # Prerequisites are not met - item should be locked
+            if item_id not in locked_items:
+                locked_items.append(item_id)
+                # This item becoming locked might lock other items, so add them to check
+                _add_dependent_items(item_id, checklist_id, items_to_check, processed_items)
+    
+    return unlocked_items, locked_items
+
+@log_function_call
+def _add_dependent_items(item_id, checklist_id, items_to_check, processed_items):
+    """
+    Helper to add items that depend on the given item to the check queue.
+    
+    Args:
+        item_id: ID of the item whose dependents to find
+        checklist_id: ID of the checklist
+        items_to_check: List to append dependent items to
+        processed_items: Set of already processed items
+    """
+    # Find items with item prerequisites on this item
+    dependent_prereqs = ItemPrerequisite.query.filter_by(
+        prerequisite_item_id=item_id
+    ).all()
+    
+    for prereq in dependent_prereqs:
+        if prereq.item_id not in processed_items and prereq.item_id not in items_to_check:
+            items_to_check.append(prereq.item_id)
+    
+    # Find items with reward prerequisites that might depend on this item's rewards
+    item = ChecklistItem.query.get(item_id)
+    if item:
+        item_reward_ids = [ir.reward_id for ir in item.rewards]
+        if item_reward_ids:
+            all_items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
+            
+            for check_item in all_items:
+                if check_item.id in processed_items or check_item.id in items_to_check:
+                    continue
+                    
+                # Check if this item has reward prerequisites for any rewards from the item
+                for prereq in check_item.prerequisites:
+                    if prereq.prerequisite_reward_id in item_reward_ids:
+                        items_to_check.append(check_item.id)
+                        break
+
 @checklist_bp.route('/<int:checklist_id>/progress/<int:item_id>/toggle', methods=['POST'])
 @login_required
 @log_function_call
@@ -758,62 +1035,10 @@ def toggle_progress(checklist_id, item_id):
     
     # If AJAX request, return JSON response with updated lock status
     if request.headers.get('Content-Type') == 'application/json' or request.is_json or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        # Check which items might have been unlocked or locked by this change
-        unlocked_items = []
-        locked_items = []
-        
-        # Find all items that have this item as a prerequisite
-        dependent_prereqs = ItemPrerequisite.query.filter_by(
-            prerequisite_item_id=item_id
-        ).all()
-        
-        for prereq in dependent_prereqs:
-            dependent_item = ChecklistItem.query.get(prereq.item_id)
-            if dependent_item and dependent_item.checklist_id == checklist_id:
-                # Check if this item's prerequisites are now met
-                are_met, unmet = dependent_item.are_prerequisites_met(user_checklist.id)
-                
-                if progress.completed:
-                    # Item was just completed - check if dependent items can be unlocked
-                    if are_met:
-                        unlocked_items.append(dependent_item.id)
-                else:
-                    # Item was just unchecked - dependent items should be locked
-                    # (since this item is now a prerequisite that is NOT met)
-                    locked_items.append(dependent_item.id)
-        
-        # Also check for items that depend on rewards from this item
-        # Get all reward IDs that this item provides
-        item_reward_ids = [ir.reward_id for ir in item.rewards]
-        
-        if item_reward_ids:
-            # Find all items in this checklist that have reward prerequisites for these rewards
-            all_items = ChecklistItem.query.filter_by(checklist_id=checklist_id).all()
-            
-            for check_item in all_items:
-                # Skip the item we just toggled
-                if check_item.id == item_id:
-                    continue
-                
-                # Check if this item has reward prerequisites for any of the rewards we provide
-                has_reward_prereq = False
-                for prereq in check_item.prerequisites:
-                    if prereq.prerequisite_reward_id in item_reward_ids:
-                        has_reward_prereq = True
-                        break
-                
-                if has_reward_prereq:
-                    # Check if this item's prerequisites are now met or not met
-                    are_met, unmet = check_item.are_prerequisites_met(user_checklist.id)
-                    
-                    # Check if this item is in our lists already
-                    if check_item.id not in unlocked_items and check_item.id not in locked_items:
-                        if are_met:
-                            # Prerequisites are met, so unlock (if not already)
-                            unlocked_items.append(check_item.id)
-                        else:
-                            # Prerequisites are not met, so lock
-                            locked_items.append(check_item.id)
+        # Find all items affected by this change using recursive chaining
+        unlocked_items, locked_items = get_affected_items_recursive(
+            checklist_id, user_checklist.id, item_id, progress.completed
+        )
         
         return jsonify({
             'success': True, 

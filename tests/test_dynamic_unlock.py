@@ -429,7 +429,7 @@ def test_toggle_progress_chain_locking(auth_client, app):
         item2_id = item2.id
         item3_id = item3.id
     
-    # Uncheck item1 - should lock item2 (item3 is still technically locked by item2)
+    # Uncheck item1 - should lock BOTH item2 and item3 (with chaining)
     response = client.post(
         f'/checklist/1/progress/{item1_id}/toggle',
         content_type='application/json'
@@ -441,5 +441,6 @@ def test_toggle_progress_chain_locking(auth_client, app):
     assert data['completed'] == False
     assert 'locked_items' in data
     assert item2_id in data['locked_items']
-    # item3 is not directly locked by unchecking item1, only item2 is
-    assert item3_id not in data['locked_items']
+    # With proper chaining, item3 should also be locked when item1 is unchecked
+    # because item3 depends on item2, which depends on item1
+    assert item3_id in data['locked_items']
