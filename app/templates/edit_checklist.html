@@ -79,7 +79,7 @@
                                     <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
                                 </span>
                                 {% elif prereq.prerequisite_reward_id %}
-                                <span class="prerequisite-tag" data-prereq-type="reward" data-prereq-reward-name="{{ prereq.prerequisite_reward.name }}" data-reward-amount="{{ prereq.reward_amount or 1 }}" data-consumes="{{ prereq.consumes_reward }}" data-reward-location="{{ prereq.reward_location or '' }}" data-reward-category="{{ prereq.reward_category or '' }}">
+                                <span class="prerequisite-tag" data-prereq-type="reward" data-prereq-reward-name="{{ prereq.prerequisite_reward.name }}" data-reward-amount="{{ prereq.reward_amount or 1 }}" data-consumes="{{ prereq.consumes_reward|lower }}" data-reward-location="{{ prereq.reward_location or '' }}" data-reward-category="{{ prereq.reward_category or '' }}">
                                     🏆 Reward: {{ prereq.reward_amount or 1 }}x {{ prereq.prerequisite_reward.name }}{% if prereq.consumes_reward %} (consumes){% endif %}{% if prereq.reward_location %} from {{ prereq.reward_location }}{% endif %}{% if prereq.reward_category %} ({{ prereq.reward_category }}){% endif %}
                                     <button type="button" class="remove-prerequisite" onclick="removePrerequisiteTag(this)" title="Remove prerequisite">×</button>
                                 </span>
