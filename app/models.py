@@ -240,6 +240,7 @@ class UserChecklist(db.Model):
                 tally[item_reward.reward_id] += item_reward.amount
             return tally
     
+    @log_function_call
     def get_consumed_rewards(self, reward_id=None, location=None, category=None):
         """Calculate the total amount of rewards consumed by completed items with consuming prerequisites.
         
@@ -292,6 +293,7 @@ class UserChecklist(db.Model):
                 consumed[prereq.prerequisite_reward_id] += prereq.reward_amount or 1
             return consumed
     
+    @log_function_call
     def get_available_rewards(self, reward_id=None, location=None, category=None):
         """Calculate the currently available amount of rewards (collected - consumed).
         
