@@ -54,3 +54,4 @@ instance/
 .pytest_cache/
 *.db
 cookies.txt
+test_chaining_demo.py
