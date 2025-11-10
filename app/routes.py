@@ -533,6 +533,9 @@ def batch_update(checklist_id):
                 db.session.add(new_item)
                 db.session.flush()  # Get the new item ID
                 
+                # Sync progress entries for all user copies
+                ChecklistItem.sync_progress_for_new_item(new_item.id, checklist_id)
+                
                 # Handle rewards for new item
                 reward_data = item_data.get('rewards', [])
                 if reward_data:
@@ -617,6 +620,9 @@ def batch_update(checklist_id):
         for item_id in deleted_ids:
             item = ChecklistItem.query.get(item_id)
             if item and item.checklist_id == checklist_id:
+                # Explicitly delete associated UserProgress entries
+                # This ensures cleanup works regardless of database FK enforcement
+                UserProgress.query.filter_by(item_id=item_id).delete()
                 db.session.delete(item)
         
         db.session.commit()
@@ -653,6 +659,11 @@ def add_item(checklist_id):
             order=max_order + 1
         )
         db.session.add(item)
+        db.session.flush()  # Get the item ID
+        
+        # Sync progress entries for all user copies
+        ChecklistItem.sync_progress_for_new_item(item.id, checklist_id)
+        
         db.session.commit()
         flash('Item added successfully!', 'success')
         return redirect(url_for('checklist.view', checklist_id=checklist_id))
@@ -703,13 +714,28 @@ def toggle_progress(checklist_id, item_id):
         checklist_id=checklist_id
     ).first_or_404()
     
+    # Get the item to check it exists and belongs to the checklist
+    item = ChecklistItem.query.get_or_404(item_id)
+    if item.checklist_id != checklist_id:
+        abort(404)
+    
+    # Try to get existing progress entry, or create one if it doesn't exist
+    # This handles cases where the database is missing user_progress entries
+    # (e.g., from before the sync fix was implemented)
     progress = UserProgress.query.filter_by(
         user_checklist_id=user_checklist.id,
         item_id=item_id
-    ).first_or_404()
+    ).first()
     
-    # Get the item to check prerequisites
-    item = ChecklistItem.query.get_or_404(item_id)
+    if not progress:
+        # Create missing progress entry
+        progress = UserProgress(
+            user_checklist_id=user_checklist.id,
+            item_id=item_id,
+            completed=False
+        )
+        db.session.add(progress)
+        db.session.flush()  # Ensure the progress entry is created before proceeding
     
     # If trying to mark as complete, check prerequisites
     if not progress.completed:

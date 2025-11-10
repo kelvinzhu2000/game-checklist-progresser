@@ -164,6 +164,38 @@ class ChecklistItem(db.Model):
         
         return (len(unmet) == 0, unmet)
     
+    @staticmethod
+    @log_function_call
+    def sync_progress_for_new_item(item_id, checklist_id):
+        """Create UserProgress entries for a new checklist item across all user copies.
+        
+        When a creator adds a new item to their checklist, this function ensures that
+        all users who have copied the checklist get a UserProgress entry for the new item.
+        
+        Args:
+            item_id: The ID of the newly created ChecklistItem
+            checklist_id: The ID of the parent Checklist
+        """
+        # Find all user copies of this checklist
+        user_checklists = UserChecklist.query.filter_by(checklist_id=checklist_id).all()
+        
+        # For each user copy, create a UserProgress entry if it doesn't exist
+        for user_checklist in user_checklists:
+            # Check if progress entry already exists
+            existing_progress = UserProgress.query.filter_by(
+                user_checklist_id=user_checklist.id,
+                item_id=item_id
+            ).first()
+            
+            if not existing_progress:
+                # Create new progress entry (uncompleted by default)
+                progress = UserProgress(
+                    user_checklist_id=user_checklist.id,
+                    item_id=item_id,
+                    completed=False
+                )
+                db.session.add(progress)
+    
     def __repr__(self):
         return f'<ChecklistItem {self.title}>'
 
@@ -248,12 +280,14 @@ class UserProgress(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     user_checklist_id = db.Column(db.Integer, db.ForeignKey('user_checklists.id'), nullable=False)
-    item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('checklist_items.id', ondelete='CASCADE'), nullable=False)
     completed = db.Column(db.Boolean, default=False)
     completed_at = db.Column(db.DateTime)
     
-    # Relationship to the item
-    item = db.relationship('ChecklistItem', backref='progress_records')
+    # Relationship to the item - with passive_deletes to let the database handle cascade
+    item = db.relationship('ChecklistItem', backref=db.backref('progress_records', 
+                                                                 cascade='all, delete-orphan',
+                                                                 passive_deletes=True))
     
     def __repr__(self):
         return f'<UserProgress item_id={self.item_id} completed={self.completed}>'
