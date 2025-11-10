@@ -97,7 +97,7 @@
                     {% set _ = reward_prereq_data.append(prereq_str) %}
                 {% endif %}
             {% endfor %}
-            <li class="item {% if user_copy and effective_progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %}" 
+            <li class="item {% if user_copy and effective_progress.get(item.id) %}completed{% endif %} {% if user_copy and item_locked.get(item.id) %}locked{% endif %} {% if user_copy and item.id in insufficient_reward_items %}insufficient-rewards{% endif %}" 
                 data-location="{{ item.location or '' }}"
                 data-category="{{ item.category or '' }}" 
                 data-rewards="{{ ','.join(reward_names) }}"
@@ -771,9 +771,78 @@ function updateRewardPrerequisiteBadges() {
     const tallies = calculateRewardTallies();
     const allItems = document.querySelectorAll('.item');
     
+    // First pass: track all consuming items by reward type
+    // Key: rewardName|location|category
+    // Value: { collected, consumed, consumingItems: [] }
+    const rewardTracking = {};
+    
+    allItems.forEach(item => {
+        const isCompleted = item.getAttribute('data-completed') === 'true';
+        const prereqData = item.getAttribute('data-reward-prerequisites');
+        
+        if (!prereqData || prereqData.trim() === '' || !isCompleted) return;
+        
+        // Parse reward prerequisites: "rewardId|amount|location|category|consumes"
+        const prereqs = prereqData.split(';').filter(p => p);
+        
+        prereqs.forEach(prereqStr => {
+            const [rewardIdStr, amountStr, location, category, consumesStr] = prereqStr.split('|');
+            const consumes = consumesStr === '1';
+            
+            if (!consumes) return; // Only track consuming prerequisites
+            
+            const rewardId = parseInt(rewardIdStr);
+            const required = parseInt(amountStr);
+            const rewardName = rewardIdToName[rewardId];
+            
+            if (!rewardName) return;
+            
+            // Create tracking key based on reward filters
+            const trackingKey = `${rewardName}|${location || ''}|${category || ''}`;
+            
+            if (!rewardTracking[trackingKey]) {
+                // Calculate collected and consumed for this combination
+                let collected = 0;
+                let consumed = 0;
+                
+                Object.entries(tallies).forEach(([key, data]) => {
+                    const [tallyRewardName, tallyLocation, tallyCategory] = key.split('|');
+                    
+                    // Check if reward name matches
+                    if (tallyRewardName !== rewardName) return;
+                    
+                    // Check if location filter matches (if specified)
+                    if (location && location !== tallyLocation) return;
+                    
+                    // Check if category filter matches (if specified)
+                    if (category && category !== tallyCategory) return;
+                    
+                    collected += data.collected;
+                    consumed += data.consumed;
+                });
+                
+                rewardTracking[trackingKey] = {
+                    collected,
+                    consumed,
+                    consumingItems: []
+                };
+            }
+            
+            // Add this item to the list of consuming items for this reward type
+            if (!rewardTracking[trackingKey].consumingItems.includes(item)) {
+                rewardTracking[trackingKey].consumingItems.push(item);
+            }
+        });
+    });
+    
+    // Second pass: update badges and apply insufficient-rewards class
     allItems.forEach(item => {
         const prereqData = item.getAttribute('data-reward-prerequisites');
-        if (!prereqData || prereqData.trim() === '') return;
+        if (!prereqData || prereqData.trim() === '') {
+            // Remove insufficient-rewards class from non-consuming items
+            item.classList.remove('insufficient-rewards');
+            return;
+        }
         
         // Parse reward prerequisites: "rewardId|amount|location|category|consumes"
         const prereqs = prereqData.split(';').filter(p => p);
@@ -813,9 +882,15 @@ function updateRewardPrerequisiteBadges() {
             const checkAmount = consumes ? available : collected;
             const isMet = checkAmount >= required;
             
-            // If this is a consuming prerequisite and there aren't enough available rewards, mark item
-            if (consumes && !isMet) {
-                hasInsufficientRewards = true;
+            // Check if this reward type has insufficient total rewards
+            if (consumes) {
+                const trackingKey = `${rewardName}|${location || ''}|${category || ''}`;
+                const tracking = rewardTracking[trackingKey];
+                
+                // If total consumed > total collected for this reward type, ALL consuming items are problematic
+                if (tracking && tracking.consumed > tracking.collected) {
+                    hasInsufficientRewards = true;
+                }
             }
             
             // Find the corresponding badge (reward prerequisite badges start with 🏆)
@@ -844,7 +919,7 @@ function updateRewardPrerequisiteBadges() {
             });
         });
         
-        // Grey out items that consume rewards they don't have enough of
+        // Apply insufficient-rewards class to ALL consuming items when total consumed > collected
         if (hasInsufficientRewards) {
             item.classList.add('insufficient-rewards');
         } else {
@@ -1332,11 +1407,11 @@ function lockItems(itemIds) {
     font-size: 1.2rem;
 }
 
-/* Items with insufficient rewards (greyed out but not fully locked) */
+/* Items with insufficient rewards (highlighted in red) */
 .item.insufficient-rewards {
-    opacity: 0.5;
-    background: #fafafa;
-    border-left: 3px solid #ff9800;
+    opacity: 1.0;
+    background: #ffe6e6;
+    border-left: 4px solid #dc3545;
 }
 
 .item.insufficient-rewards .item-checkbox {
@@ -1344,7 +1419,7 @@ function lockItems(itemIds) {
 }
 
 .item.insufficient-rewards h3 {
-    color: #888;
+    color: #dc3545;
 }
 
 .item.insufficient-rewards::after {

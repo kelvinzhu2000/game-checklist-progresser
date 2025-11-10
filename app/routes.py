@@ -288,6 +288,7 @@ def view(checklist_id):
     effective_progress = {}  # Track effective completion (considers prerequisites)
     item_locked = {}  # Track which items are locked due to prerequisites
     reward_tallies = {}  # Track reward tallies for checking prerequisites
+    insufficient_reward_items = set()  # Track items with insufficient rewards
     
     if current_user.is_authenticated:
         user_copy = UserChecklist.query.filter_by(
@@ -310,6 +311,10 @@ def view(checklist_id):
                                 category=prereq.reward_category
                             )
             
+            # Get items with insufficient rewards
+            problematic_items = user_copy.get_items_with_insufficient_rewards()
+            insufficient_reward_items = set(item.id for item in problematic_items)
+            
             for item in items:
                 prog = UserProgress.query.filter_by(
                     user_checklist_id=user_copy.id,
@@ -328,7 +333,8 @@ def view(checklist_id):
     
     return render_template('view_checklist.html', checklist=checklist, items=items, 
                          user_copy=user_copy, progress=progress, effective_progress=effective_progress,
-                         item_locked=item_locked, reward_tallies=reward_tallies)
+                         item_locked=item_locked, reward_tallies=reward_tallies,
+                         insufficient_reward_items=insufficient_reward_items)
 
 @checklist_bp.route('/<int:checklist_id>/edit', methods=['GET', 'POST'])
 @login_required
