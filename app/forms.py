@@ -14,9 +14,9 @@ def log_function_call(func):
         # Get the form class if it's a method
         if args and hasattr(args[0], '__class__'):
             class_name = args[0].__class__.__name__
-            logger.info(f"{class_name}.{func.__name__} called with args={args[1:]}, kwargs={kwargs}")
+            logger.debug(f"{class_name}.{func.__name__} called with args={args[1:]}, kwargs={kwargs}")
         else:
-            logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+            logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
         return func(*args, **kwargs)
     return wrapper
 

@@ -13,7 +13,7 @@ def log_function_call(func):
     """Decorator to log function calls with parameters."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+        logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
         return func(*args, **kwargs)
     return wrapper
 

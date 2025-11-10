@@ -17,7 +17,7 @@ def log_function_call(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         # For route handlers, log the endpoint and request info
-        logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+        logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
         return func(*args, **kwargs)
     return wrapper
 

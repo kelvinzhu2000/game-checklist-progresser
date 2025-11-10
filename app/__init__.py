@@ -12,7 +12,7 @@ def create_app():
     
     # Configure logging
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(funcName)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
@@ -20,7 +20,7 @@ def create_app():
         ]
     )
     logger = logging.getLogger(__name__)
-    logger.info("create_app called")
+    logger.debug("create_app called")
     
     # Configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -28,22 +28,22 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize extensions
-    logger.info("Initializing database and login manager")
+    logger.debug("Initializing database and login manager")
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     
     # Register blueprints
-    logger.info("Registering blueprints")
+    logger.debug("Registering blueprints")
     from app.routes import main_bp, auth_bp, checklist_bp
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(checklist_bp)
     
     # Create database tables
-    logger.info("Creating database tables")
+    logger.debug("Creating database tables")
     with app.app_context():
         db.create_all()
     
-    logger.info("Application created successfully")
+    logger.debug("Application created successfully")
     return app

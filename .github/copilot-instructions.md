@@ -36,7 +36,7 @@ game-checklist-progresser/
 - Keep functions focused on a single responsibility
 
 ### Logging Guidelines
-- **ALWAYS** add info-level logging to function calls using the `@log_function_call` decorator
+- **ALWAYS** add debug-level logging to function calls using the `@log_function_call` decorator
 - Import logging and functools at the top of each module: `import logging` and `import functools`
 - Create a logger for each module: `logger = logging.getLogger(__name__)`
 - Use the decorator on:
@@ -52,7 +52,7 @@ game-checklist-progresser/
       """Decorator to log function calls with parameters."""
       @functools.wraps(func)
       def wrapper(*args, **kwargs):
-          logger.info(f"{func.__name__} called with args={args}, kwargs={kwargs}")
+          logger.debug(f"{func.__name__} called with args={args}, kwargs={kwargs}")
           return func(*args, **kwargs)
       return wrapper
   ```
