@@ -357,6 +357,104 @@ class UserChecklist(db.Model):
             
             return available
     
+    @log_function_call
+    def get_items_with_insufficient_rewards(self):
+        """Get all checked items that consume rewards when there aren't enough available.
+        
+        This detects situations where the total consumed rewards exceed total collected rewards,
+        meaning that some consuming items cannot be satisfied. In this case, ALL consuming items
+        should be flagged as problematic.
+        
+        Returns:
+            list: List of ChecklistItem objects that consume rewards and are currently checked,
+                  but there are insufficient rewards available for all consuming items combined.
+        """
+        # Get all completed items for this user checklist
+        completed_progress = self.progress_items.filter_by(completed=True).all()
+        completed_item_ids = [p.item_id for p in completed_progress]
+        
+        if not completed_item_ids:
+            return []
+        
+        # Build a dict of reward consumption by reward+location+category combination
+        # Key: (reward_id, location, category)
+        # Value: {collected: X, consumed: Y, consuming_items: [item1, item2, ...]}
+        reward_tracking = {}
+        
+        # First, calculate collected rewards
+        query = db.session.query(ChecklistItem, ItemReward).join(
+            ItemReward, ChecklistItem.id == ItemReward.checklist_item_id
+        ).filter(
+            ChecklistItem.id.in_(completed_item_ids)
+        )
+        
+        for check_item, item_reward in query.all():
+            # For each combination of reward+location+category, track collected amount
+            key = (item_reward.reward_id, check_item.location, check_item.category)
+            if key not in reward_tracking:
+                reward_tracking[key] = {'collected': 0, 'consumed': 0, 'consuming_items': []}
+            reward_tracking[key]['collected'] += item_reward.amount
+        
+        # Second, calculate consumed rewards and track which items consume them
+        prereq_query = db.session.query(ItemPrerequisite, ChecklistItem).join(
+            ChecklistItem, ItemPrerequisite.item_id == ChecklistItem.id
+        ).filter(
+            ItemPrerequisite.item_id.in_(completed_item_ids),
+            ItemPrerequisite.prerequisite_reward_id.isnot(None),
+            ItemPrerequisite.consumes_reward == True
+        )
+        
+        for prereq, check_item in prereq_query.all():
+            # Match prerequisites to rewards based on filters
+            # A prerequisite with location='Forest' can only use rewards from items with location='Forest'
+            # A prerequisite with no location filter can use rewards from any location
+            
+            # Find all reward tracking keys that match this prerequisite's filters
+            matching_keys = []
+            for key in reward_tracking.keys():
+                reward_id, item_location, item_category = key
+                
+                # Check if reward ID matches
+                if reward_id != prereq.prerequisite_reward_id:
+                    continue
+                
+                # Check if location filter matches
+                if prereq.reward_location is not None:
+                    if item_location != prereq.reward_location:
+                        continue
+                
+                # Check if category filter matches
+                if prereq.reward_category is not None:
+                    if item_category != prereq.reward_category:
+                        continue
+                
+                matching_keys.append(key)
+            
+            # If no matching keys exist yet, create one for the prerequisite's filters
+            if not matching_keys:
+                key = (prereq.prerequisite_reward_id, prereq.reward_location, prereq.reward_category)
+                reward_tracking[key] = {'collected': 0, 'consumed': 0, 'consuming_items': []}
+                matching_keys = [key]
+            
+            # Add consumed amount to all matching keys
+            amount = prereq.reward_amount or 1
+            for key in matching_keys:
+                reward_tracking[key]['consumed'] += amount
+                if check_item not in reward_tracking[key]['consuming_items']:
+                    reward_tracking[key]['consuming_items'].append(check_item)
+        
+        # Now check which reward combinations have insufficient amounts
+        problematic_items = []
+        for key, data in reward_tracking.items():
+            if data['consumed'] > data['collected']:
+                # This reward combination has more consumed than collected
+                # Add ALL consuming items for this combination to the problematic list
+                for item in data['consuming_items']:
+                    if item not in problematic_items:
+                        problematic_items.append(item)
+        
+        return problematic_items
+    
     def __repr__(self):
         return f'<UserChecklist user_id={self.user_id} checklist_id={self.checklist_id}>'
 
