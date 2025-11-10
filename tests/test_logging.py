@@ -37,7 +37,7 @@ def log_capture():
     # Create a string buffer to capture logs
     log_buffer = StringIO()
     handler = logging.StreamHandler(log_buffer)
-    handler.setLevel(logging.INFO)
+    handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(name)s - %(levelname)s - %(funcName)s - %(message)s')
     handler.setFormatter(formatter)
     
@@ -52,7 +52,7 @@ def log_capture():
     
     for logger in loggers_to_test:
         logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
     
     yield log_buffer
     
