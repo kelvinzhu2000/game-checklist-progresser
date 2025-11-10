@@ -93,7 +93,7 @@
             {% set reward_prereq_data = [] %}
             {% for prereq in item.prerequisites %}
                 {% if prereq.prerequisite_reward_id %}
-                    {% set prereq_str = prereq.prerequisite_reward_id|string ~ '|' ~ (prereq.reward_amount or 1)|string ~ '|' ~ (prereq.reward_location or '') ~ '|' ~ (prereq.reward_category or '') %}
+                    {% set prereq_str = prereq.prerequisite_reward_id|string ~ '|' ~ (prereq.reward_amount or 1)|string ~ '|' ~ (prereq.reward_location or '') ~ '|' ~ (prereq.reward_category or '') ~ '|' ~ ('1' if prereq.consumes_reward else '0') %}
                     {% set _ = reward_prereq_data.append(prereq_str) %}
                 {% endif %}
             {% endfor %}
@@ -599,7 +599,7 @@ function calculateRewardTotals(items) {
                 const amount = parseInt(amountStr) || 0;
                 
                 if (!totals[rewardName]) {
-                    totals[rewardName] = { total: 0, collected: 0 };
+                    totals[rewardName] = { total: 0, collected: 0, consumed: 0 };
                 }
                 
                 totals[rewardName].total += amount;
@@ -608,6 +608,36 @@ function calculateRewardTotals(items) {
                 }
             });
         }
+        
+        // Calculate consumed rewards from completed items with consuming prerequisites
+        if (isCompleted) {
+            const prereqData = item.getAttribute('data-reward-prerequisites');
+            if (prereqData && prereqData.trim() !== '') {
+                const prereqs = prereqData.split(';').filter(p => p);
+                prereqs.forEach(prereqStr => {
+                    const [rewardIdStr, amountStr, location, category, consumesStr] = prereqStr.split('|');
+                    const consumes = consumesStr === '1';
+                    
+                    if (consumes) {
+                        const rewardId = parseInt(rewardIdStr);
+                        const rewardName = rewardIdToName[rewardId];
+                        const amount = parseInt(amountStr) || 1;
+                        
+                        if (rewardName) {
+                            if (!totals[rewardName]) {
+                                totals[rewardName] = { total: 0, collected: 0, consumed: 0 };
+                            }
+                            totals[rewardName].consumed += amount;
+                        }
+                    }
+                });
+            }
+        }
+    });
+    
+    // Calculate available (collected - consumed)
+    Object.keys(totals).forEach(rewardName => {
+        totals[rewardName].available = Math.max(0, totals[rewardName].collected - totals[rewardName].consumed);
     });
     
     return totals;
@@ -639,7 +669,10 @@ function updateRewardTally() {
             rewardItem.className = 'tally-item';
             rewardItem.innerHTML = `
                 <span class="tally-reward-name">🏆 ${rewardName}</span>
-                <span class="tally-count">${data.collected} / ${data.total}</span>
+                <div class="tally-counts">
+                    <span class="tally-count">${data.collected} / ${data.total}</span>
+                    <span class="tally-available">Available: ${data.available}</span>
+                </div>
             `;
             allRewardsDiv.appendChild(rewardItem);
         });
@@ -658,16 +691,19 @@ function updateRewardTally() {
             rewardItem.className = 'tally-item';
             rewardItem.innerHTML = `
                 <span class="tally-reward-name">🏆 ${rewardName}</span>
-                <span class="tally-count">${data.collected} / ${data.total}</span>
+                <div class="tally-counts">
+                    <span class="tally-count">${data.collected} / ${data.total}</span>
+                    <span class="tally-available">Available: ${data.available}</span>
+                </div>
             `;
             filteredRewardsDiv.appendChild(rewardItem);
         });
     }
 }
 
-// Function to calculate reward tallies from completed items
+// Function to calculate reward tallies from completed items (with consumed tracking)
 function calculateRewardTallies() {
-    const tallies = {}; // { rewardName: { total: X, collected: Y } }
+    const tallies = {}; // { key: { collected: X, consumed: Y, available: Z, rewardName, location, category } }
     const allItems = document.querySelectorAll('.item');
     
     allItems.forEach(item => {
@@ -685,7 +721,7 @@ function calculateRewardTallies() {
                 // Store with location and category for filtering
                 const key = `${rewardName}|${location}|${category}`;
                 if (!tallies[key]) {
-                    tallies[key] = { collected: 0, rewardName, location, category };
+                    tallies[key] = { collected: 0, consumed: 0, available: 0, rewardName, location, category };
                 }
                 
                 if (isCompleted) {
@@ -693,6 +729,38 @@ function calculateRewardTallies() {
                 }
             });
         }
+        
+        // Track consumed rewards from completed items with consuming prerequisites
+        if (isCompleted) {
+            const prereqData = item.getAttribute('data-reward-prerequisites');
+            if (prereqData && prereqData.trim() !== '') {
+                const prereqs = prereqData.split(';').filter(p => p);
+                prereqs.forEach(prereqStr => {
+                    const [rewardIdStr, amountStr, prereqLocation, prereqCategory, consumesStr] = prereqStr.split('|');
+                    const consumes = consumesStr === '1';
+                    
+                    if (consumes) {
+                        const rewardId = parseInt(rewardIdStr);
+                        const rewardName = rewardIdToName[rewardId];
+                        const amount = parseInt(amountStr) || 1;
+                        
+                        if (rewardName) {
+                            // Match the key based on prerequisite filters
+                            const key = `${rewardName}|${prereqLocation}|${prereqCategory}`;
+                            if (!tallies[key]) {
+                                tallies[key] = { collected: 0, consumed: 0, available: 0, rewardName, location: prereqLocation, category: prereqCategory };
+                            }
+                            tallies[key].consumed += amount;
+                        }
+                    }
+                });
+            }
+        }
+    });
+    
+    // Calculate available (collected - consumed)
+    Object.keys(tallies).forEach(key => {
+        tallies[key].available = Math.max(0, tallies[key].collected - tallies[key].consumed);
     });
     
     return tallies;
@@ -707,20 +775,24 @@ function updateRewardPrerequisiteBadges() {
         const prereqData = item.getAttribute('data-reward-prerequisites');
         if (!prereqData || prereqData.trim() === '') return;
         
-        // Parse reward prerequisites: "rewardId|amount|location|category"
+        // Parse reward prerequisites: "rewardId|amount|location|category|consumes"
         const prereqs = prereqData.split(';').filter(p => p);
         const prereqBadges = item.querySelectorAll('.item-prerequisite-badge');
         
+        let hasInsufficientRewards = false;
+        
         prereqs.forEach((prereqStr, index) => {
-            const [rewardIdStr, amountStr, location, category] = prereqStr.split('|');
+            const [rewardIdStr, amountStr, location, category, consumesStr] = prereqStr.split('|');
             const rewardId = parseInt(rewardIdStr);
             const required = parseInt(amountStr);
             const rewardName = rewardIdToName[rewardId];
+            const consumes = consumesStr === '1';
             
             if (!rewardName) return;
             
-            // Calculate collected amount with filters
+            // Calculate available amount with filters (use available for consuming prerequisites)
             let collected = 0;
+            let available = 0;
             Object.entries(tallies).forEach(([key, data]) => {
                 const [tallyRewardName, tallyLocation, tallyCategory] = key.split('|');
                 
@@ -734,18 +806,29 @@ function updateRewardPrerequisiteBadges() {
                 if (category && category !== tallyCategory) return;
                 
                 collected += data.collected;
+                available += data.available;
             });
+            
+            // For consuming prerequisites, check against available; otherwise check against collected
+            const checkAmount = consumes ? available : collected;
+            const isMet = checkAmount >= required;
+            
+            // If this is a consuming prerequisite and there aren't enough available rewards, mark item
+            if (consumes && !isMet) {
+                hasInsufficientRewards = true;
+            }
             
             // Find the corresponding badge (reward prerequisite badges start with 🏆)
             prereqBadges.forEach(badge => {
                 const badgeText = badge.textContent.trim();
                 if (badgeText.startsWith('🏆') && badgeText.includes(rewardName)) {
                     // Update the badge text with new tally
-                    const isMet = collected >= required;
-                    let newText = `🏆 ${collected}/${required}x ${rewardName}`;
+                    // For consuming prerequisites, show available; otherwise show collected
+                    const displayAmount = consumes ? available : collected;
+                    let newText = `🏆 ${displayAmount}/${required}x ${rewardName}`;
                     if (location) newText += ` (${location})`;
                     if (category) newText += ` [${category}]`;
-                    if (badgeText.includes('(consumes)')) newText += ' (consumes)';
+                    if (consumes) newText += ' (consumes)';
                     
                     badge.textContent = newText;
                     
@@ -760,6 +843,13 @@ function updateRewardPrerequisiteBadges() {
                 }
             });
         });
+        
+        // Grey out items that consume rewards they don't have enough of
+        if (hasInsufficientRewards) {
+            item.classList.add('insufficient-rewards');
+        } else {
+            item.classList.remove('insufficient-rewards');
+        }
     });
 }
 
@@ -1143,6 +1233,13 @@ function lockItems(itemIds) {
     color: #495057;
 }
 
+.tally-counts {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
 .tally-count {
     font-size: 0.95rem;
     font-weight: 600;
@@ -1150,6 +1247,15 @@ function lockItems(itemIds) {
     background: #d4edda;
     padding: 0.25rem 0.75rem;
     border-radius: 12px;
+}
+
+.tally-available {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #0056b3;
+    background: #cce5ff;
+    padding: 0.2rem 0.6rem;
+    border-radius: 10px;
 }
 
 .no-rewards {
@@ -1224,6 +1330,29 @@ function lockItems(itemIds) {
     top: 10px;
     right: 10px;
     font-size: 1.2rem;
+}
+
+/* Items with insufficient rewards (greyed out but not fully locked) */
+.item.insufficient-rewards {
+    opacity: 0.5;
+    background: #fafafa;
+    border-left: 3px solid #ff9800;
+}
+
+.item.insufficient-rewards .item-checkbox {
+    cursor: not-allowed;
+}
+
+.item.insufficient-rewards h3 {
+    color: #888;
+}
+
+.item.insufficient-rewards::after {
+    content: "⚠️";
+    position: absolute;
+    top: 10px;
+    right: 40px;
+    font-size: 1.1rem;
 }
 
 .item {
